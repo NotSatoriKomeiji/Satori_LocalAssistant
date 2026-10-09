@@ -1,0 +1,2 @@
+body{width:280px;margin:0;padding:18px;background:white;color:#403849;font:13px/1.6 system-ui;border-top:2px solid #d5afd8}p{color:#796680}strong{font-weight:600}
+body{width:360px;max-height:580px;overflow:auto}input:not([type=checkbox]),textarea{box-sizing:border-box;width:100%;margin:5px 0;padding:6px}button{margin:3px;padding:6px;cursor:pointer}#phrases>div{display:flex;align-items:center}#phrases button:first-child{flex:1;text-align:left}#result{color:#754688}

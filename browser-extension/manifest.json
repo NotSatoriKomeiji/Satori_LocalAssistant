@@ -1,0 +1,47 @@
+{
+  "manifest_version": 3,
+  "name": "Satori 快速词与常用网站",
+  "version": "0.1.0",
+  "description": "快速词与桌面版共用开关和词库，右下角点击输入；本地学习普通词句，跳过敏感输入。",
+  "permissions": [
+    "webNavigation",
+    "nativeMessaging",
+    "storage",
+    "tabs"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Satori 快速词",
+    "default_popup": "popup.html"
+  },
+  "incognito": "not_allowed",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAjruOiB+PV92G0Fv2kwhKDrs0hXfPia4AYFQgZzBnOSK5lxnd91RO4MUzyl51ftDGUkDviRWJl9pskzmteU/dD/fyr2pjVlK0TCfe6PhFbc+pl3kAMKhpS211lBG06q8X/XkzG07Wiai3IfayIHWUlkpmgiItxVsWfs8AK230ELZRaRJukKXP/MNy0tZ7xEaqb3gGxW1BwUd0LiDEp7uCMHceztemNfpGZ8sdOvvolh0GrWnenzHWynkGIGGinCWO1VN/V7FFPTHmqyKBJev8h0Uff4AJ5RkHGQ7Srk1p0bpRsz1XT1QtrpOrWypQ7TbZ/ZyYmEKoMwiDloxU85JZQQIDAQAB",
+  "host_permissions": [
+    "https://*/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "phrases.js"
+      ],
+      "matches": [
+        "https://*/*"
+      ]
+    }
+  ]
+}

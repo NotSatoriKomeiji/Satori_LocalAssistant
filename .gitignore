@@ -1,0 +1,36 @@
+node_modules/
+dist/
+target/
+*.db
+*.db-shm
+*.db-wal
+.env*
+!.env.example
+*.log
+test-results/
+playwright-report/
+src-tauri/gen/
+
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+browser-policy.json
+browser-inbox/
+browser-extension/native-host.json
+
+# Assistant runtime data and secrets
+assist*.json
+quick-words-live.json
+quick-words-inbox/
+*.exe
+*.dll
+*.msi
+*.zip
+*.pdb
+.DS_Store
+# Runtime npm security reports can contain local paths
+security-audit*.json
+
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm

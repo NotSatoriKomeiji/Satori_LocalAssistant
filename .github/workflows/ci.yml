@@ -1,0 +1,41 @@
+name: Verify Satori
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - run: npm ci
+      - run: cargo fmt --all --check
+      - run: cargo test -p habitos-core --locked
+      - run: cargo clippy -p habitos-core --all-targets --locked -- -D warnings
+      - run: npm run check
+      - run: npm run build
+      - run: cargo test -p habitos-desktop --locked --features custom-protocol
+      - run: npm run tauri -- build --no-bundle
+      - run: node scripts/verify-release.mjs target/release/satori.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: satori-windows-unsigned-alpha
+          path: target/release/satori.exe
+  panel:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
+      - run: npm test
