@@ -7,7 +7,6 @@ Satori 是面向普通电脑用户的 Windows 桌面助手。无需 API 就能�
 
 *A local-first Windows companion that learns your habits and wakes optional AI only when needed.*
 
-公开版整理自内部 0.3.0 原型，保留现有功能和 SQLite schema 5，不是回退旧代码。采用 Rust / Tauri / Svelte / SQLite。
 
 ## 运行
 
