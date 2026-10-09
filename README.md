@@ -88,4 +88,4 @@ node scripts/verify-release.mjs target/release/satori.exe
 
 本项目使用 [MIT 许可证](LICENSE)。第三方依赖和运行包组件遵守各自许可证，清单与许可文本见 [third-party/DEPENDENCIES.md](third-party/DEPENDENCIES.md)。源码包不包含构建缓存、运行程序或个人数据库。
 
-本项目使用 AI 辅助设计、编码、文档和测试；产品决策与发布由维护者负责。具体边界见 [AI 辅助开发说明](docs/AI-DEVELOPMENT.md)，问题反馈见 [SECURITY.md](SECURITY.md)。
+本项目使用 AI 辅助设计、编码、文档和测试；产品决策与发布由维护者负责。具体边界见 [AI 辅助开发说明](docs/AI-DEVELOPMENT.md)。
