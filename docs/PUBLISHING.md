@@ -13,16 +13,16 @@ GitHub 创建页不用额外生成 README、.gitignore 或许可证：这些已�
 源码包包含较多依赖许可文件，推荐 GitHub Desktop，避免分批网页上传。
 
 1. 在 GitHub Desktop 中登录自己的账号，选择 File → Clone repository，克隆刚建立的 `NotSatoriKomeiji/Cyber3rdEye_Satori`。
-2. 解压 `Satori-v0.1.0-source.zip`，把其中 `Cyber3rdEye_Satori` 文件夹的**内容**复制进克隆目录。确保仓库根目录直接能看到 README.md、LICENSE、Cargo.toml、package.json；不要再嵌套一层同名目录。
+2. 解压 `Satori-v0.1.3-source.zip`，把其中 `Cyber3rdEye_Satori` 文件夹的**内容**复制进克隆目录。确保仓库根目录直接能看到 README.md、LICENSE、Cargo.toml、package.json；不要再嵌套一层同名目录。
 3. 查看 Changes，确认没有真实数据库、密钥、exe、node_modules 或 target。源码包中包括 `.github`、`.gitignore` 和 `.gitattributes`，复制时保留这些文件。
-4. 填写提交信息 `Initial public alpha v0.1.0`，点击 Commit，再点击 Push origin。
+4. 填写提交信息 `Fix program registration feedback v0.1.3`，点击 Commit，再点击 Push origin。
 5. 打开仓库 Actions 页查看 Verify Satori。配置存在不等于检查已经通过，以实际运行结果为准。
 
 不要把源码 ZIP 当成唯一的代码文件上传到仓库：解压后的代码才便于浏览、审查和接收贡献。
 
 ## 发布运行包
 
-在 Releases 中新建 `v0.1.0-alpha` 标签的发行版，标题 `Satori 0.1.0 Alpha`，勾选预发布，上传 `Satori-v0.1.0-windows-x64.zip`。发行说明可参考 [RELEASE.md](RELEASE.md)，保留真机未验收说明。源码和运行包分开，运行程序放 Releases。
+在 Releases 中新建 `v0.1.3-alpha` 标签的发行版，标题 `Satori 0.1.3 Alpha`，勾选预发布，上传 `Satori-v0.1.3-windows-x64.zip`。发行说明可参考 [RELEASE.md](RELEASE.md)，保留真机未验收说明。源码和运行包分开，运行程序放 Releases。
 
 公开后建议开启私有漏洞报告、Dependabot 告警和密钥推送保护。不要在 Issue 中发布凭据；如果密钥曾进入提交历史，应先撤销/轮换密钥，再处理历史，不能只删除最新文件。
 

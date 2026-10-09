@@ -557,6 +557,16 @@ impl Store {
         }
         Ok(())
     }
+    pub fn remove_target(&self, id: &str) -> Result<()> {
+        if self
+            .connection
+            .execute("DELETE FROM launch_targets WHERE app_id=?1", [id])?
+            == 0
+        {
+            return Err(crate::rule("该程序已不在已添加列表中"));
+        }
+        Ok(())
+    }
     pub fn launch_path(&self, id: &str) -> Result<String> {
         self.connection
             .query_row(

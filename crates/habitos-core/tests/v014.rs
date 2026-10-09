@@ -140,26 +140,32 @@ fn associations_need_independent_days_are_bounded_and_can_be_disabled() {
         .all(|a| a.association_score == 0.0));
 }
 #[test]
-fn grid_launch_is_explicit_and_rechecks_context_permission_and_pause() {
+fn manual_grid_launch_ignores_recommendation_and_learning_switches() {
     let (mut e, mut p) = setup();
     target(&mut e, "cold", 1, 12, "");
     assert!(e.app_recommendation.is_none());
     let session = e.current.as_ref().unwrap().session.clone();
     let rows = e.store.usage(AT).unwrap().len();
-    assert!(e.open_target("cold", "stale", &mut p, AT + 1).is_err());
+    // Manual clicks no longer rely on a changing foreground session.
+    e.open_target("cold", "stale", &mut p, AT + 1).unwrap();
     e.open_target("cold", &session, &mut p, AT + 1).unwrap();
     assert_eq!(p.current.volume, 0.5);
     assert_eq!(e.store.usage(AT + 1).unwrap().len(), rows);
+    // Manual shortcuts are independent of observation permissions.
     e.permission("cold", false, Mode::Off).unwrap();
-    assert!(e.open_target("cold", &session, &mut p, AT + 2).is_err());
+    e.open_target("cold", &session, &mut p, AT + 2).unwrap();
     e.permission("cold", true, Mode::Ask).unwrap();
     p.demo_scene("sensitive").unwrap();
-    assert!(e.open_target("cold", &session, &mut p, AT + 3).is_err());
+    // Foreground sessions no longer prevent an explicit click on a non-sensitive target.
+    e.open_target("cold", &session, &mut p, AT + 3).unwrap();
     let mut settings = e.settings.clone();
     settings.paused = true;
     e.save_settings(settings).unwrap();
     assert!(e.quick_apps(AT).unwrap().is_empty());
-    assert!(e.open_target("cold", &session, &mut p, AT + 4).is_err());
+    // Pausing learning and recommendations does not disable an explicit click.
+    p.demo_scene("game").unwrap();
+    assert_eq!(e.home_apps(AT).unwrap().len(), 1);
+    e.open_target("cold", &session, &mut p, AT + 4).unwrap();
 }
 #[test]
 fn deleting_memory_removes_rank_accumulators_but_keeps_launch_permission() {

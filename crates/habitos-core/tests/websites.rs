@@ -102,12 +102,13 @@ fn website_click_is_explicit_and_does_not_change_volume_or_fake_usage() {
     let id = website::id("https://www.bilibili.com/");
     let session = e.current.as_ref().unwrap().session.clone();
     assert!(e.app_recommendation.is_none());
-    assert!(e.open_target(&id, "old", &mut p, AT + 1).is_err());
+    e.open_target(&id, "old", &mut p, AT + 1).unwrap();
     e.open_target(&id, &session, &mut p, AT + 1).unwrap();
     assert_eq!(p.current.volume, 0.5);
     assert!(e.store.usage(AT + 1).unwrap().is_empty());
     e.permission(&id, false, Mode::Off).unwrap();
-    assert!(e.open_target(&id, &session, &mut p, AT + 2).is_err());
+    // Disabling site observation is not disabling a manual saved bookmark.
+    e.open_target(&id, &session, &mut p, AT + 2).unwrap();
 }
 #[test]
 fn deleting_website_memory_keeps_target_and_does_not_resurrect_score() {

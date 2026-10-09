@@ -4,7 +4,7 @@ let seq=0;
 const state:Status={
   experience:{rules:[],pending:[],question:null,local_hits:0,automatic_calls_today:0},demo:true,settings:{paused:false,automatic_learning:true,auto_adjustments:true,time_recommendations:true,floating_cards:true,associations:true,website_observation:false,app_min_days:2,app_threshold:.50,app_margin:.08,suggest_threshold:.50,auto_threshold:.50,min_auto_samples:3,min_auto_sessions:3,max_volume:.8,max_auto_delta:.05,retention_days:90},
   current:{app_id:'preview-game',app_name:'Game.exe（模拟）',device:'preview-speakers',hour:new Date().getHours(),weekday:(new Date().getDay()+6)%7,local_day:new Date().getFullYear()*10000+(new Date().getMonth()+1)*100+new Date().getDate(),session:'preview',recent:[],activity:'application',power:null},
-  memories:[],targets:[],app_recommendation:null,quick_apps:[],
+  memories:[],targets:[],app_recommendation:null,quick_apps:[],home_apps:[],
   capabilities:[{id:'open_website',name:'打开站点首页',available:true,autonomous:false,authorization:'仅明确点击，通过默认浏览器打开HTTPS首页'},{id:'volume',name:'主音量',available:true,autonomous:true,authorization:'默认逐次确认；自动调整需应用单独授权'},{id:'brightness',name:'屏幕亮度',available:false,autonomous:true,authorization:'未实现，不能请求或执行亮度动作'},{id:'open_app',name:'打开已选应用',available:true,autonomous:false,authorization:'仅明确点击；不能自动启动'}],
   extensions:[{id:'associations',name:'应用联想',api_version:1,scope:'usage_metadata'}],
   startup:{supported:true,enabled:false,simulated:true,message:'演示状态，不修改系统启动项'},
@@ -38,8 +38,10 @@ export async function preview(name:string,args:Record<string,unknown>):Promise<S
       if(!state.memories.some(m=>m.app_id===id))state.memories.push({app_id:id,name:permission.name,pinned:false,importance:.35,last_used:Date.now()/1000-86400,days:8,samples:0});
     }state.message='已加载6个模拟应用';
   }else if(name==='open_target'){
-    if(args.session!==c?.session || !state.quick_apps.some(a=>a.app_id===args.id))throw '推荐目标已失效';
-    state.app_recommendation=null;state.message=String(args.id).startsWith('web_')?'模拟打开网站，未调用真实浏览器':'模拟打开应用，未启动真实程序';
+    const target=state.targets.find(t=>t.app_id===args.id&&t.enabled);
+    if(!target)throw '已添加目标不存在或已停用';
+    if(state.apps.find(p=>p.id===target.app_id)?.sensitive)throw '敏感软件受到保护';
+    state.message=target.kind==='website'?'模拟打开网站，未调用真实浏览器':'模拟打开应用，未启动真实程序';
   }else if(name==='open_panel'||name==='hide_popup'){}
   else if(name==='grant_current'&&c){
     const p=state.apps.find(p=>p.id===c.app_id);
@@ -96,12 +98,17 @@ export async function preview(name:string,args:Record<string,unknown>):Promise<S
     const m=state.memories.find(m=>m.app_id===args.id);if(m){m.pinned=Boolean(args.pinned);m.importance=m.pinned?1:.2;}
   }else if(name==='delete_memory'){
     state.memories=state.memories.filter(m=>m.app_id!==args.id);state.events=state.events.filter(e=>e.app_name!==state.apps.find(p=>p.id===args.id)?.name);state.event_count=state.events.length;state.samples=state.memories.reduce((sum,m)=>sum+m.samples,0);state.proposal=null;state.app_recommendation=null;
+  }else if(name==='remove_target'){
+    const t=state.targets.find(t=>t.app_id===args.id&&t.kind==='app');if(!t)throw '该 exe 应用已不在已添加列表中';
+    state.targets=state.targets.filter(t=>t.app_id!==args.id);state.app_recommendation=null;state.message='已从列表移除 '+t.name+'，电脑上的 exe 文件保留';
   }else if(name==='set_target'){
     const t=state.targets.find(t=>t.app_id===args.id);if(t)t.enabled=Boolean(args.enabled);state.app_recommendation=null;
   }else if(name==='add_target'){throw '网页预览不访问文件；桌面版会打开 exe 选择窗口。';}
   else if(name==='dismiss_app'){state.app_recommendation=null;state.message='演示推荐已忽略';}
   else if(name==='launch_app'){if(!state.app_recommendation||state.app_recommendation.id!==args.id)throw '推荐已失效';state.app_recommendation=null;state.message='模拟打开应用，未启动真实程序';}
   else if(name==='forget'){state.experience={rules:[],pending:[],question:null,local_hits:0,automatic_calls_today:state.experience.automatic_calls_today};state.memories=[];state.app_recommendation=null;state.samples=0;state.events=[];state.event_count=0;state.journal=[];state.proposal=null;state.message='演示记录已清除';}
+  // Home shortcuts are always shown independently from the AI recommendation toggle.
+  state.home_apps=state.targets.filter(t=>t.enabled&&!state.apps.find(p=>p.id===t.app_id)?.sensitive).map(t=>{const days=state.memories.find(m=>m.app_id===t.app_id)?.days??0;const overall=1-Math.pow(.99,days);const period=1-Math.pow(.96,days);return {kind:t.kind,app_id:t.app_id,name:t.name,score:.2*overall+.75*period,overall_score:overall,period_score:period,association_score:0,days,period_days:days,active:t.app_id===c?.app_id};}).sort((a,b)=>b.score-a.score||a.name.localeCompare(b.name)||a.app_id.localeCompare(b.app_id)).slice(0,6);
   state.quick_apps=effective()&&!state.apps.find(p=>p.id===c?.app_id)?.sensitive&&state.settings.time_recommendations ? state.targets.filter(t=>{const p=state.apps.find(p=>p.id===t.app_id);return t.enabled&&p?.observe&&!p.sensitive&&(p.explicit||state.settings.automatic_learning);}).map(t=>{const days=state.memories.find(m=>m.app_id===t.app_id)?.days??0;const overall=1-Math.pow(.99,days);const period=1-Math.pow(.96,days);return {kind:t.kind,app_id:t.app_id,name:t.name,score:.2*overall+.75*period,overall_score:overall,period_score:period,association_score:0,days,period_days:days,active:t.app_id===c?.app_id};}).sort((a,b)=>b.score-a.score||a.name.localeCompare(b.name)).slice(0,6):[];
   return structuredClone(state);
 }

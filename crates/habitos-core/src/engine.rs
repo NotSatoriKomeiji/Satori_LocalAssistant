@@ -811,7 +811,8 @@ impl Engine {
                     .ok_or_else(|| crate::rule("候选不存在"))?;
                 // Existing guarded launch path, after a real user click; AI never launches by itself.
                 self.open_target(target, &c.session, platform, at)?;
-                // Successful explicit launch has already taught the same choice locally.
+                // The user explicitly accepted; manual launching does not train suggestion feedback.
+                self.store.confirm_experience(id, revision, true, at)?;
                 self.message = "记住了，下次相似场景优先在本地建议这个程序".into();
                 return Ok(());
             }
@@ -846,12 +847,23 @@ impl Engine {
     pub fn register_target(&mut self, path: &str) -> Result<()> {
         let file = std::path::Path::new(path);
         if !file.is_absolute()
-            || !file.is_file()
             || !file
                 .extension()
                 .is_some_and(|x| x.eq_ignore_ascii_case("exe"))
         {
             return Err(crate::rule("请选择已有的本地 exe 文件"));
+        }
+        let metadata = file.metadata().map_err(|error| {
+            crate::rule(match error.kind() {
+                std::io::ErrorKind::NotFound => "所选程序不存在或已移动，请重新选择 exe 文件",
+                std::io::ErrorKind::PermissionDenied => {
+                    "无法读取所选程序，请选择当前账户可以访问的 exe 文件"
+                }
+                _ => "无法读取所选程序文件，请检查文件是否可访问",
+            })
+        })?;
+        if !metadata.is_file() {
+            return Err(crate::rule("请选择 exe 文件，不能添加文件夹"));
         }
         let name = file
             .file_name()
@@ -875,7 +887,7 @@ impl Engine {
             })?;
         }
         self.store.register_target(&id, path)?;
-        self.message = "已添加推荐目标；每次点击推荐卡才会打开".into();
+        self.message = format!("已保存 {name}；常用应用位最多显示六个，其余可在下方列表打开");
         Ok(())
     }
     pub fn register_website(&mut self, input: &str) -> Result<()> {
@@ -1010,6 +1022,64 @@ impl Engine {
         self.app_recommendation = None;
         Ok(())
     }
+    pub fn remove_target(&mut self, id: &str) -> Result<()> {
+        let target = self
+            .store
+            .targets()?
+            .into_iter()
+            .find(|t| t.app_id == id && t.kind == "app")
+            .ok_or_else(|| crate::rule("该 exe 应用已不在已添加列表中"))?;
+        self.store.remove_target(id)?;
+        self.app_recommendation = None;
+        self.message = format!("已从列表移除 {}，电脑上的 exe 文件保留", target.name);
+        Ok(())
+    }
+    /// The six home launchers are NOT recommendations: registering an app must
+    /// not require learning, a foreground observation or proactive suggestions.
+    /// Sensitive/disabled targets remain in the management list, not the grid.
+    pub fn home_apps(&self, at: i64) -> Result<Vec<RankedApp>> {
+        let permissions = self.store.permissions()?;
+        let current = self.current.as_ref();
+        let period = current.map_or(2, |c| crate::usage_score::period(c.hour));
+        let scores = self.store.usage_scores(at, period)?;
+        let mut ranked = Vec::new();
+        for target in self.store.targets()? {
+            if !target.enabled
+                || !permissions
+                    .iter()
+                    .any(|p| p.id == target.app_id && !p.sensitive)
+            {
+                continue;
+            }
+            let (overall, period_score, days, period_days) = scores
+                .iter()
+                .find(|s| s.app_id == target.app_id)
+                .map_or((0.0, 0.0, 0, 0), |s| {
+                    (s.overall, s.period, s.days, s.period_days)
+                });
+            ranked.push(RankedApp {
+                kind: target.kind,
+                active: current.is_some_and(|c| c.app_id == target.app_id),
+                app_id: target.app_id,
+                name: target.name,
+                score: crate::usage_score::combine(overall, period_score, 0.0),
+                overall_score: overall,
+                period_score,
+                association_score: 0.0,
+                days,
+                period_days,
+            });
+        }
+        ranked.sort_by(|a, b| {
+            b.score
+                .total_cmp(&a.score)
+                .then_with(|| b.period_days.cmp(&a.period_days))
+                .then_with(|| a.name.cmp(&b.name))
+                .then_with(|| a.app_id.cmp(&b.app_id))
+        });
+        ranked.truncate(6);
+        Ok(ranked)
+    }
     pub fn quick_apps(&self, at: i64) -> Result<Vec<RankedApp>> {
         if self.settings.paused || !self.settings.time_recommendations {
             return Ok(vec![]);
@@ -1091,30 +1161,44 @@ impl Engine {
     pub fn open_target(
         &mut self,
         id: &str,
-        session: &str,
+        _session: &str,
         platform: &mut dyn Platform,
-        at: i64,
+        _at: i64,
     ) -> Result<()> {
-        if self.current.as_ref().is_none_or(|c| c.session != session) {
-            return Err(crate::rule("场景已变化，请重新打开推荐面板"));
-        }
-        let app = self
-            .quick_apps(at)?
+        // A direct user click is valid even if opening the Satori window changed
+        // the foreground session. The target must still be saved and enabled.
+        // Explicit user click: do not route through offer/launch_app, which
+        // requires proactive recommendations and would train recommendation feedback.
+        let target = self
+            .store
+            .targets()?
             .into_iter()
-            .find(|p| p.app_id == id)
-            .ok_or_else(|| crate::rule("推荐目标已失效或停用"))?;
-        let offer = AppRecommendation {
-            id: uuid::Uuid::new_v4().to_string(),
-            app_id: app.app_id,
-            app_name: app.name,
-            confidence: app.score,
-            days: app.days,
-            reason: "用户点击托盘推荐".into(),
-            created: at,
-        };
-        self.store.offer(&offer)?;
-        self.app_recommendation = Some(offer.clone());
-        self.launch_app(&offer.id, platform, at)
+            .find(|t| t.app_id == id && t.enabled)
+            .ok_or_else(|| crate::rule("已添加目标不存在或已停用"))?;
+        let permission = self
+            .store
+            .permission(id)?
+            .ok_or_else(|| crate::rule("应用规则不存在"))?;
+        if permission.sensitive {
+            return Err(crate::rule("敏感软件受到保护，无法从 Satori 打开"));
+        }
+        let path = self.store.launch_path(id)?;
+        if target.kind == "website" {
+            platform.open_website(&crate::website::origin(&path)?)?;
+        } else {
+            platform.launch_program(&path)?;
+        }
+        self.message = if self.demo {
+            if target.kind == "website" {
+                "模拟打开网站，未调用真实浏览器"
+            } else {
+                "模拟打开应用，未启动真实程序"
+            }
+        } else {
+            "已按你的点击打开目标；不会自动启动其他应用"
+        }
+        .into();
+        Ok(())
     }
     fn suggest_app(&mut self, at: i64) -> Result<()> {
         if !self.settings.time_recommendations
@@ -1176,7 +1260,7 @@ impl Engine {
                 }
             } else {
                 if self.settings.automatic_learning {
-                    let grid = self.quick_apps(at)?;
+                    let grid = self.home_apps(at)?;
                     let candidates = choices
                         .iter()
                         .take(6)
@@ -1201,11 +1285,7 @@ impl Engine {
         }
         if let Some(p) = choices.into_iter().next() {
             // A proactive prompt must offer an app visible in the six-slot grid.
-            if !self
-                .quick_apps(at)?
-                .iter()
-                .any(|app| app.app_id == p.app_id)
-            {
+            if !self.home_apps(at)?.iter().any(|app| app.app_id == p.app_id) {
                 return Ok(());
             }
             self.store.offer(&p)?;
@@ -1414,6 +1494,7 @@ impl Engine {
             )?,
             demo: self.demo,
             quick_apps: self.quick_apps(at)?,
+            home_apps: self.home_apps(at)?,
             capabilities: crate::extensions::capabilities(self.demo || cfg!(windows)),
             extensions: self.extensions.info(),
             browser_last_event: self.browser_last_event,

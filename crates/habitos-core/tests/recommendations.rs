@@ -343,6 +343,132 @@ fn target_registration_validates_files_and_never_revives_sensitive_rules() {
 }
 
 #[test]
+fn selected_programs_persist_beyond_six_slots_and_readding_preserves_opt_out() {
+    let dir = tempfile::tempdir().unwrap();
+    let database = dir.path().join("saved.sqlite3");
+    let mut e = Engine::new(Store::open(&database).unwrap(), true).unwrap();
+    let mut platform = DemoPlatform::default();
+    e.observe(platform.snapshot().unwrap(), AT).unwrap();
+    for n in 0..8 {
+        let file = dir.path().join(format!("普通 程序{n}.exe"));
+        std::fs::write(&file, b"fixture").unwrap();
+        e.register_target(file.to_str().unwrap()).unwrap();
+    }
+    assert_eq!(e.status(AT).unwrap().targets.len(), 8);
+    assert_eq!(e.quick_apps(AT).unwrap().len(), 6);
+    let selected = dir.path().join("普通 程序7.exe");
+    let path = selected.to_str().unwrap();
+    let id = habitos_core::platform::identity(path);
+    e.permission(&id, false, Mode::Off).unwrap();
+    e.register_target(path).unwrap();
+    assert_eq!(e.status(AT).unwrap().targets.len(), 8);
+    let permission = e.store.permission(&id).unwrap().unwrap();
+    assert!(!permission.observe);
+    assert_eq!(permission.volume, Mode::Off);
+    e.settings.paused = true;
+    assert!(e.quick_apps(AT).unwrap().is_empty());
+    assert_eq!(e.status(AT).unwrap().targets.len(), 8);
+    drop(e);
+    let restored = Store::open(&database).unwrap();
+    assert_eq!(restored.targets().unwrap().len(), 8);
+    assert_eq!(restored.launch_path(&id).unwrap(), path);
+    assert!(!restored.permission(&id).unwrap().unwrap().observe);
+}
+
+#[test]
+fn home_launchers_fill_immediately_and_ignore_learning_and_recommendation_switches() {
+    let (mut e, mut platform) = setup();
+    let dir = tempfile::tempdir().unwrap();
+    let exe = dir.path().join("Immediate.exe");
+    std::fs::write(&exe, b"fixture").unwrap();
+    let id = habitos_core::platform::identity(exe.to_str().unwrap());
+    e.settings.paused = true;
+    e.settings.automatic_learning = false;
+    e.settings.time_recommendations = false;
+    e.register_target(exe.to_str().unwrap()).unwrap();
+    assert!(e.quick_apps(AT).unwrap().is_empty());
+    assert_eq!(e.status(AT).unwrap().home_apps[0].app_id, id);
+    assert!(!e.store.permission(&id).unwrap().unwrap().observe);
+    let session = e.current.as_ref().unwrap().session.clone();
+    e.open_target(&id, &session, &mut platform, AT).unwrap();
+    assert!(e.app_recommendation.is_none());
+    assert_eq!(e.store.recommendation_feedback(&id).unwrap(), (2., 2.));
+    assert_eq!(e.store.usage(AT).unwrap().len(), 0);
+    e.sensitive(&id, true).unwrap();
+    assert!(e.home_apps(AT).unwrap().is_empty());
+    assert!(e.open_target(&id, &session, &mut platform, AT).is_err());
+    assert_eq!(e.status(AT).unwrap().targets.len(), 1);
+}
+
+#[test]
+fn saved_target_outside_six_home_slots_can_launch_directly() {
+    let (mut e, mut platform) = setup();
+    let dir = tempfile::tempdir().unwrap();
+    for n in 0..8 {
+        let exe = dir.path().join(format!("Shortcut{n}.exe"));
+        std::fs::write(&exe, b"fixture").unwrap();
+        e.register_target(exe.to_str().unwrap()).unwrap();
+    }
+    assert_eq!(e.home_apps(AT).unwrap().len(), 6);
+    let seventh = dir.path().join("Shortcut7.exe");
+    let id = habitos_core::platform::identity(seventh.to_str().unwrap());
+    assert!(!e.home_apps(AT).unwrap().iter().any(|a| a.app_id == id));
+    let session = e.current.as_ref().unwrap().session.clone();
+    e.open_target(&id, &session, &mut platform, AT).unwrap();
+    e.target_enabled(&id, false).unwrap();
+    assert!(e.open_target(&id, &session, &mut platform, AT).is_err());
+}
+
+#[test]
+fn inaccessible_selection_reports_failure_without_saving_a_target() {
+    let (mut e, _) = setup();
+    let dir = tempfile::tempdir().unwrap();
+    let absent = dir.path().join("moved.exe");
+    let error = e.register_target(absent.to_str().unwrap()).unwrap_err();
+    assert!(error.to_string().contains("不存在或已移动"));
+    let directory = dir.path().join("folder.exe");
+    std::fs::create_dir(&directory).unwrap();
+    assert!(e
+        .register_target(directory.to_str().unwrap())
+        .unwrap_err()
+        .to_string()
+        .contains("不能添加文件夹"));
+    assert!(e.store.targets().unwrap().is_empty());
+}
+
+#[test]
+fn removing_program_target_persists_without_deleting_exe_or_changing_learning_rules() {
+    let dir = tempfile::tempdir().unwrap();
+    let database = dir.path().join("remove.sqlite3");
+    let exe = dir.path().join("My Program.exe");
+    std::fs::write(&exe, b"keep this file").unwrap();
+    let path = exe.to_str().unwrap();
+    let id = habitos_core::platform::identity(path);
+    let mut e = Engine::new(Store::open(&database).unwrap(), true).unwrap();
+    let mut platform = DemoPlatform::default();
+    e.observe(platform.snapshot().unwrap(), AT).unwrap();
+    e.register_target(path).unwrap();
+    e.permission(&id, false, Mode::Off).unwrap();
+    let session = e.current.as_ref().unwrap().session.clone();
+    e.remove_target(&id).unwrap();
+    assert!(e.status(AT).unwrap().targets.is_empty());
+    assert!(!e.quick_apps(AT).unwrap().iter().any(|t| t.app_id == id));
+    assert!(e.open_target(&id, &session, &mut platform, AT).is_err());
+    assert_eq!(std::fs::read(&exe).unwrap(), b"keep this file");
+    assert!(!e.store.permission(&id).unwrap().unwrap().observe);
+    assert!(e.remove_target(&id).is_err());
+    drop(e);
+    let mut restored = Engine::new(Store::open(&database).unwrap(), true).unwrap();
+    assert!(restored.store.targets().unwrap().is_empty());
+    assert!(restored.store.launch_path(&id).is_err());
+    restored.register_target(path).unwrap();
+    assert_eq!(restored.store.targets().unwrap().len(), 1);
+    let permission = restored.store.permission(&id).unwrap().unwrap();
+    assert!(!permission.observe);
+    assert_eq!(permission.volume, Mode::Off);
+}
+
+#[test]
 fn chronological_holdout_preflight_rejects_bursts_outliers_and_future_leakage() {
     let (e, _) = setup();
     let c = e.current.unwrap();

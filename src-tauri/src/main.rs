@@ -8,12 +8,22 @@ use habitos_core::{
     runtime::{Command, Runtime},
 };
 use std::collections::HashSet;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Emitter, Manager, State, WindowEvent,
 };
+
+#[derive(Default)]
+struct ProgramPicker(AtomicBool);
+struct PickerGuard<'a>(&'a AtomicBool);
+impl Drop for PickerGuard<'_> {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::Release);
+    }
+}
 
 fn run(runtime: State<'_, Runtime>, command: Command) -> Result<Status, String> {
     runtime.command(command).map_err(|e| e.to_string())
@@ -93,6 +103,10 @@ fn set_target(runtime: State<'_, Runtime>, id: String, enabled: bool) -> Result<
     run(runtime, Command::TargetEnabled { id, enabled })
 }
 #[tauri::command]
+fn remove_target(runtime: State<'_, Runtime>, id: String) -> Result<Status, String> {
+    run(runtime, Command::RemoveTarget(id))
+}
+#[tauri::command]
 fn launch_app(runtime: State<'_, Runtime>, id: String) -> Result<Status, String> {
     run(runtime, Command::LaunchApp(id))
 }
@@ -105,7 +119,17 @@ fn demo_recommend(runtime: State<'_, Runtime>) -> Result<Status, String> {
     run(runtime, Command::DemoRecommend)
 }
 #[tauri::command]
-fn add_target(window: tauri::WebviewWindow, runtime: State<'_, Runtime>) -> Result<Status, String> {
+fn add_target(
+    window: tauri::WebviewWindow,
+    runtime: State<'_, Runtime>,
+    picker: State<'_, ProgramPicker>,
+) -> Result<Status, String> {
+    if picker.0.swap(true, Ordering::AcqRel) {
+        return Err("应用选择窗口已打开，请先完成或取消选择".into());
+    }
+    // A native modal dialog takes focus from its owner. Keep the tray owner
+    // visible until selection completes, including cancellation and errors.
+    let _guard = PickerGuard(&picker.0);
     #[cfg(windows)]
     if let Some(path) = habitos_core::platform::windows::choose_program(
         window.hwnd().map_err(|e| e.to_string())?.0 as isize,
@@ -116,7 +140,9 @@ fn add_target(window: tauri::WebviewWindow, runtime: State<'_, Runtime>) -> Resu
     }
     #[cfg(not(windows))]
     let _ = window;
-    run(runtime, Command::Status)
+    let mut status = run(runtime, Command::Status)?;
+    status.message = "已取消添加应用，没有修改已保存的列表".into();
+    Ok(status)
 }
 
 #[tauri::command]
@@ -167,6 +193,7 @@ fn main() {
     let demo = std::env::args().any(|a| a == "--demo") || !cfg!(windows);
     let background = std::env::args().any(|a| a == "--background");
     tauri::Builder::default()
+        .manage(ProgramPicker::default())
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.show();
@@ -351,7 +378,10 @@ fn main() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            if matches!(event, WindowEvent::Focused(false)) && window.label() == "tray" {
+            if matches!(event, WindowEvent::Focused(false))
+                && window.label() == "tray"
+                && !window.state::<ProgramPicker>().0.load(Ordering::Acquire)
+            {
                 let _ = window.hide();
             }
             if let WindowEvent::CloseRequested { api, .. } = event {
@@ -387,6 +417,7 @@ fn main() {
             pin_memory,
             delete_memory,
             set_target,
+            remove_target,
             add_target,
             launch_app,
             dismiss_app,

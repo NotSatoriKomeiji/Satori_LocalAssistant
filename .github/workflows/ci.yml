@@ -15,6 +15,14 @@ jobs:
         with:
           components: rustfmt, clippy
       - run: npm ci
+      - name: AI response UTF-8 regression (Windows PowerShell 5.1)
+        shell: powershell
+        run: ./tests/ai-response.Tests.ps1
+      - name: AI HTTP loopback regression
+        run: python tests/ai_http_fixture.py --powershell powershell
+      - name: AI system prompt boundary regression (Windows PowerShell 5.1)
+        shell: powershell
+        run: ./tests/ai-prompt.Tests.ps1
       - run: cargo fmt --all --check
       - run: cargo test -p habitos-core --locked
       - run: cargo clippy -p habitos-core --all-targets --locked -- -D warnings

@@ -159,6 +159,9 @@ pub struct Status {
     pub targets: Vec<LaunchTarget>,
     pub app_recommendation: Option<AppRecommendation>,
     pub quick_apps: Vec<RankedApp>,
+    /// Manually saved launchers for the home grid. Independent of AI suggestions.
+    #[serde(default)]
+    pub home_apps: Vec<RankedApp>,
     pub capabilities: Vec<crate::extensions::Capability>,
     pub extensions: Vec<crate::extensions::ExtensionInfo>,
     pub browser_last_event: i64,

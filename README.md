@@ -1,18 +1,22 @@
-# Satori · 
+# Satori · 本地习惯助手
 
+**熟悉的事在本地做，陌生的事才唤醒 AI。学会以后，回到本地。**
 
 Satori 是面向普通电脑用户的 Windows 桌面助手。无需 API 就能学习常用应用、提供快速词，以及按习惯小幅调节主音量和外接屏亮度。可选 AI 层负责解释反复出现的陌生冲突、协助澄清程序选择；经过验证的经验保存在 SQLite，后续相似场景优先离线处理。
 
-**v0.1.0 Alpha · 首个公开版本 · MIT**
+**v0.1.3 Alpha · 应用添加与移除补丁 · MIT**
 
 *A local-first Windows companion that learns your habits and wakes optional AI only when needed.*
 
+公开版整理自内部 0.3.0 原型，保留现有功能和 SQLite schema 5，不是回退旧代码。采用 Rust / Tauri / Svelte / SQLite。
 
 ## 运行
 
 完整解压 Windows 运行包，进入 `satori`，双击 `Start-Background.cmd`。托盘左键查看常用应用，双击打开主面板，右键暂停或退出。`Start-Real.cmd` 打开真实面板；`Start-Demo.cmd` 使用独立模拟数据库，不控制真实设备、不发送 AI 请求。
 
 需要 Windows x64 与 WebView2 Runtime；`satori.exe` 和 `WebView2Loader.dll` 放在同一目录。切换真实/演示模式前，从托盘退出旧实例。
+
+添加应用后会显示结果，并展开「已添加的应用与网站」。这里列出全部保存目标，推荐卡片仍最多显示六个；搜索也能找到未进入推荐位的已添加目标。暂停、关闭学习或敏感前台场景不会删除已添加记录。exe 应用旁的「移除」可取消该推荐目标，不删除电脑上的程序文件，也不更改已有学习开关或偏好；需要时可重新添加。
 
 开机启动：打开主面板 → **设置 → 开机自启动 → 开启**。默认关闭，登录 Windows 后后台运行，只修改当前用户启动项，无需管理员权限。演示模式只切换模拟状态。建议先把运行包放到固定目录，再开启；移动或删除程序前关闭启动项，换路径后重新开启。
 
@@ -32,10 +36,17 @@ Satori 是面向普通电脑用户的 Windows 桌面助手。无需 API 就能�
 
 ![首页演示](docs/home.png)
 
+## 我们想保留的特点
+
+助手记住的是「什么时候该让你来决定」：单次手动纠正马上优先，两个独立场景的重复纠正形成有边界、可忘记的本地经验。没有撤销不算满意，程序自己的动作不训练自己。可选 AI 只协助解释陌生边界，确认过后就回到本地复用。
 
 ## 冷处理 API
 
 默认本地模式，不配置服务也能使用。首页的「AI 增强 · 可选」可连接兼容 Chat Completions 的公开 HTTPS 接口。密钥只在本次程序运行的内存中，退出后需要重新连接。
+
+0.1.2 为每次 AI 请求加入正式系统提示词，明确助手的目标、按需工作方式、敏感边界及输出协议；提示词不授予执行权，本地护栏继续负责验证。详情见 [AI 系统提示词](docs/AI-PROMPT.md)。
+
+0.1.1 修复了部分接口返回中文乱码的问题：请求、响应和脚本输出均明确使用 UTF-8。主动回答保留换行、长文本自动折行，请求失败时清除旧回答；API 仍是可选层。
 
 没有每步推理循环。两个独立场景出现纠正或程序歧义后，才产生待解释事件；满足开关、普通场景、冷却和预算时，单独线程调用 AI。自动唤醒最多 5 次/UTC 日，相隔至少 10 分钟；主动问答与自动唤醒合计最多 50 次/UTC 日，预算持久化，不因重启或清除经验而重置。
 
@@ -66,6 +77,9 @@ cargo test -p habitos-core --locked
 cargo clippy -p habitos-core --all-targets --locked -- -D warnings
 npm run check
 npm run test:browser
+./tests/ai-response.Tests.ps1
+./tests/ai-prompt.Tests.ps1
+python tests/ai_http_fixture.py --powershell powershell
 npm test
 npm run tauri -- build --no-bundle
 node scripts/verify-release.mjs target/release/satori.exe

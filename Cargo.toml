@@ -4,7 +4,7 @@ default-members = ["crates/habitos-core"]
 resolver = "2"
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.3"
 license = "MIT"
 authors = ["NotSatoriKomeiji"]
 edition = "2021"

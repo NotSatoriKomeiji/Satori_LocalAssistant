@@ -66,6 +66,7 @@ pub enum Command {
     },
     DeleteMemory(String),
     RegisterTarget(String),
+    RemoveTarget(String),
     TargetEnabled {
         id: String,
         enabled: bool,
@@ -388,6 +389,7 @@ fn handle(command: Command, engine: &mut Engine, platform: &mut dyn Platform) ->
         Command::PinMemory { id, pinned } => engine.pin_memory(&id, pinned),
         Command::DeleteMemory(id) => engine.delete_memory(&id),
         Command::RegisterTarget(path) => engine.register_target(&path),
+        Command::RemoveTarget(id) => engine.remove_target(&id),
         Command::TargetEnabled { id, enabled } => engine.target_enabled(&id, enabled),
         Command::LaunchApp(id) => engine.launch_app(&id, platform, now()),
         Command::OpenTarget { id, session } => engine.open_target(&id, &session, platform, now()),

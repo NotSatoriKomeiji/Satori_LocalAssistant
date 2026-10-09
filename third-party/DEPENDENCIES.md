@@ -260,3 +260,7 @@ Windows target metadata, including build and test dependencies. License texts ar
 | zerovec-derive | 0.11.6 | Unicode-3.0 | https://github.com/unicode-org/icu4x |
 | zlib-rs | 0.6.8 | Zlib | https://github.com/trifectatechfoundation/zlib-rs |
 | zmij | 1.0.23 | MIT | https://github.com/dtolnay/zmij |
+
+## 0.1.3 portable build toolchain
+
+The Windows GNU build uses GCC 13.2.0 (MinGW POSIX), mingw-w64 headers 11.0.1 and binutils 2.41.90. Ubuntu package copyright notices for the compiler runtime and headers are included above. Application dependency versions remain pinned by the existing Cargo and npm lockfiles.

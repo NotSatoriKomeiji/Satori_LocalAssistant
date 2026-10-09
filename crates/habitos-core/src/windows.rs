@@ -574,10 +574,15 @@ pub fn choose_program(owner: isize) -> Result<Option<String>> {
     if unsafe { GetOpenFileNameW(&mut dialog) }.as_bool() {
         let end = buffer.iter().position(|x| *x == 0).unwrap_or(buffer.len());
         Ok(Some(String::from_utf16_lossy(&buffer[..end])))
-    } else if unsafe { CommDlgExtendedError() }.0 == 0 {
-        Ok(None)
     } else {
-        Err(crate::rule("无法打开应用选择窗口"))
+        let error = unsafe { CommDlgExtendedError() }.0;
+        if error == 0 {
+            Ok(None)
+        } else {
+            Err(crate::rule(&format!(
+                "应用选择窗口出错（代码 0x{error:X}），请重新打开面板后选择 exe 文件"
+            )))
+        }
     }
 }
 pub fn show_card_inactive(handle: isize) -> Result<()> {
