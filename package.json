@@ -20,7 +20,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.56.1",
-    "@sveltejs/vite-plugin-svelte": "^6.0.0",
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "@tauri-apps/cli": "^2.0.0",
     "svelte-check": "^4.0.0",
     "typescript": "^5.0.0",
