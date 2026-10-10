@@ -70,7 +70,7 @@ jobs:
       - name: Native packaged Windows demo startup
         shell: powershell
         run: ./tests/windows-smoke.Tests.ps1 -Executable release/satori/satori.exe
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: satori-windows-unsigned-alpha
           path: release/*.zip
@@ -96,14 +96,14 @@ jobs:
         run: npm test -- --workers=2 --repeat-each=20 tests/saved-targets-toggle.spec.ts tests/assist-refresh.spec.ts tests/assist.spec.ts
       - name: Upload failed browser test diagnostics
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: satori-panel-failure-diagnostics
           path: test-results/
           if-no-files-found: ignore
       - name: Upload verified preview screenshots
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: satori-preview-screenshots
           path: |
