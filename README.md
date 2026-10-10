@@ -4,7 +4,7 @@
 
 Satori 是面向普通电脑用户的 Windows 桌面助手。无需 API 就能学习常用应用、提供快速词，以及按习惯小幅调节主音量和外接屏亮度。可选 AI 层负责解释反复出现的陌生冲突、协助澄清程序选择；经过验证的经验保存在 SQLite，后续相似场景优先离线处理。
 
-**v0.1.3 Alpha · 应用添加与移除补丁 · MIT**
+**v0.1.4 Alpha · 搜索展开与版本同步修复 · MIT**
 
 *A local-first Windows companion that learns your habits and wakes optional AI only when needed.*
 
@@ -98,3 +98,4 @@ node scripts/verify-release.mjs target/release/satori.exe
 本项目使用 [MIT 许可证](LICENSE)。第三方依赖和运行包组件遵守各自许可证，清单与许可文本见 [third-party/DEPENDENCIES.md](third-party/DEPENDENCIES.md)。源码包不包含构建缓存、运行程序或个人数据库。
 
 本项目使用 AI 辅助设计、编码、文档和测试；产品决策与发布由维护者负责。具体边界见 [AI 辅助开发说明](docs/AI-DEVELOPMENT.md)。
+## 0.14 修理了一个边界bug，并且略微优化代码逻辑（孩子们我不该大晚上不睡觉和gpt一起敲代码的）

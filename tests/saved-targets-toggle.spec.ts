@@ -21,4 +21,29 @@ test('saved targets stay expanded after status changes and remain user-toggleabl
   await page.getByLabel('快速搜索').fill('Music');
   await expect(targets).toHaveJSProperty('open', true);
   await expect(targets.getByRole('list', {name: '已添加目标'})).toContainText('Music.exe');
+
+  // Clearing the search keeps the expanded list and restores every saved target.
+  await page.getByLabel('快速搜索').fill('');
+  await expect(targets).toHaveJSProperty('open', true);
+  await expect(targets.getByRole('listitem')).toHaveCount(6);
+
+  // A whitespace-only query does not override a manual collapse.
+  await heading.click();
+  await expect(targets).toHaveJSProperty('open', false);
+  await page.getByLabel('快速搜索').fill('   ');
+  await expect(targets).toHaveJSProperty('open', false);
+
+  // Both the shortcut grid and complete list use the same trimmed search.
+  await page.getByLabel('快速搜索').fill('  mUsIc  ');
+  await expect(targets).toHaveJSProperty('open', true);
+  await expect(targets.getByRole('listitem')).toHaveCount(1);
+  await expect(page.getByRole('button', {name: '打开 Music.exe（模拟）', exact: true})).toBeVisible();
+
+  // A user may close results even with an active query; refreshing preserves it.
+  await heading.click();
+  await expect(targets).toHaveJSProperty('open', false);
+  await page.getByRole('button', {name: '继续运行', exact: true}).click();
+  await expect(targets).toHaveJSProperty('open', false);
+  await page.getByLabel('快速搜索').fill('Music');
+  await expect(targets).toHaveJSProperty('open', true);
 });

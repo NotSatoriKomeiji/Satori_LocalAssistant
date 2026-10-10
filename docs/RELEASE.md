@@ -1,66 +1,40 @@
-# Satori v0.1.3 Alpha · 移除按钮补丁
+# Satori v0.1.4 Alpha · 搜索展开修复版
 
-本次修复添加 exe 后缺少反馈、保存目标不在六个推荐位中时无法查看，以及托盘失焦收起可能干扰原生文件选择的问题。保留 0.1.2 系统提示词和 0.1.1 中文响应修复。首个公开版本为 0.1.0，来自内部 0.3.0 原型；本次不改变 SQLite schema 5、应用数据标识或本地学习机制。项目使用 MIT 许可，第三方组件遵守各自许可。
+本版以用户上传的 `Satori-v0.1.3-home-shortcuts-source(1).zip` 为基础。上传源码已经包含搜索输入展开列表的修复；本次先在未修改源码上运行全部 22 项 Playwright 测试，全部通过。因此，截图中的 GitHub 失败记录不能用于判断上传源码仍有此错误，也不能单凭截图确认当前仓库是否已更新。
 
-## 0.1.3 补丁
+## 本版修改
 
-已添加列表中的 exe 应用增加「移除」按钮，暂停时也可移除。操作只取消 Satori 中的推荐目标，保留电脑文件、学习开关和历史偏好；后续可重新添加。本补丁不修改版本号或数据库 schema，也不新增 AI 执行能力。
-
-## 本次变更
-
-- 首页显示添加结果，并展开完整的「已添加的应用与网站」列表。六个推荐位继续按习惯排序，完整列表不受六个位置的限制；搜索也能查到已保存但未进入推荐位的目标。
-- 暂停、关闭学习或敏感前台场景不会隐藏已保存列表；重新添加普通程序不会覆盖已有的学习关闭或敏感规则。
-- 托盘浮窗也显示添加结果。文件选择期间保留托盘父窗口，防止失焦处理立即收起窗口；取消选择明确显示未添加，文件不存在、不可访问和原生对话框错误会显示具体原因。
-- 本次不新增执行能力或敏感权限，API 仍可选，系统提示词与冷处理机制保留。手动启动独立检查目标仍已保存、启用且不是敏感软件；原 AI 主动推荐链保持独立。
-
-## 本次验证
-
-| 检查 | 结果 |
-| --- | --- |
-| Rust 核心及可选层替代传输 | 71 项通过，不发送真实服务商请求 |
-| Playwright 面板、扩展与 AI 输出 | 20 项通过 |
-| 浏览器隐私过滤 | 3 项通过 |
-| AI UTF-8 响应解析 | 14 项通过 |
-| 系统提示词与请求角色边界 | 23 项通过 |
-| 本机 HTTP 模拟接口 | 7 项通过：缺少/错误 charset、压缩、重定向、错误状态、无效 UTF-8、响应大小 |
-| Svelte 类型检查 | 0 错误、0 警告 |
-| Windows GNU 全目标 Clippy | `-D warnings` 通过（工作区全部目标） |
-| Windows x64 GNU 生产构建及内嵌资源 | 通过；含移除按钮的最新前端、7 种图标与两份辅助脚本实际内嵌 |
-
-补丁新增移除后的 SQLite 持久化、磁盘 exe 不变、学习关闭不被覆盖、无法再通过旧目标启动，以及正常/暂停界面的移除回归。
-
-新增测试覆盖超过六个目标的 SQLite 持久化、重复添加与保留用户关闭规则，以及推荐位满、暂停、关闭学习、敏感场景、取消、错误和托盘反馈。界面测试使用模拟选择结果，不冒充原生文件选择验收。
-
-AI 脚本、浏览器过滤与 HTTP 模拟结果沿用 0.1.2（对应代码未变）；当时在 Linux PowerShell 7.5.3 上运行，未调用用户的真实 API。Windows PowerShell 5.1 回归已加入 GitHub Actions，推送后的实际 CI 结果仍需查看。Linux 模拟与 Windows GNU 交叉编译不代替 Windows 真机和真实服务商验收。
+- 保留非空搜索输入时展开完整列表、后台刷新不覆盖手动展开/收起的行为。
+- 快捷格和完整列表使用相同的搜索词处理：忽略首尾空格及大小写。
+- 扩展原失败测试：清空搜索保持展开、空白搜索不强制展开、搜索期间允许手动收起、暂停/恢复保留收起状态、再次输入搜索重新展开。
+- Cargo 工作区、两份本地 crate 锁记录、npm 元数据、Tauri 配置和界面统一标为 0.1.4；第三方依赖版本不变。浏览器扩展未修改，沿用 0.1.3。
 
 ## 下载与升级
 
-`Satori-v0.1.3-source.zip`：公开源码、锁文件、测试、CI、文档和第三方许可；不含程序或构建缓存。解压后的项目文件可用于更新 GitHub 源码仓库。
+- `Satori-v0.1.4-source.zip`：完整源码、测试、锁文件、GitHub Actions、文档和许可，不包含构建缓存。
+- `Satori-v0.1.4-windows-x64.zip`：Windows x64 便携 Release；完整解压后进入 satori 目录，运行 `Start-Real.cmd` 或 `Start-Background.cmd`。程序需要 WebView2 Runtime。
 
-`Satori-v0.1.3-windows-x64.zip`：便携运行包。需 Windows x64 与 WebView2 Runtime，完整解压后运行 `Start-Background.cmd`；运行包尚未签名，没有自动更新。
+升级前从托盘退出旧实例。界面左下角显示 v0.1.4。应用标识仍为 `io.habitos.desktop`，SQLite schema 仍为 5，升级无需删除学习数据。
 
-先从托盘退出旧版，再解压并启动新版。数据标识仍为 `io.habitos.desktop`、SQLite schema 仍为 5，不清除本地习惯。API 密钥只保存在本次运行内存，重启后需重新连接。若移动程序路径，请在设置中重新启用开机启动。AI 脚本和系统提示词内嵌在 exe 中，使用新运行包才能应用此次更新。
+## 更新 GitHub 源码
 
-## 尚需真机验收
+把源码包中的 `Cyber3rdEye_Satori` 目录内容复制到现有仓库根目录（保留现有 `.git`）。同时替换 `src/App.svelte`、测试、版本文件、文档及 `.github` 内容；不要把项目目录整体套进仓库再建一层，也不要把 Release ZIP 当作源码上传。
 
-Windows 真实 exe 选择与托盘焦点、启动项和浮卡焦点；UIA/输入法；外接屏 DDC/CI；Windows PowerShell 5.1 与真实 API 服务商请求；资源占用。网站观察仍需配套 Chrome/Edge 扩展，本次没有增加 DNS 监听或无扩展地址读取。
+在仓库目录检查后提交：
 
-## v0.1.3 界面补丁：常用应用快捷入口（不升级版本号）
+```powershell
+npm ci
+npm run check
+npx playwright install chromium
+npm test
+git status
+git add src/App.svelte tests/saved-targets-toggle.spec.ts Cargo.toml Cargo.lock package.json package-lock.json src-tauri/tauri.conf.json README.md docs/RELEASE.md docs/BUILD-INFO.md docs/RUST-BUILD.md
+git commit -m "fix(panel): preserve saved target toggles and normalize quick search"
+git push
+```
 
-- 「常用应用与网站」上方六格从 `home_apps` 渲染，添加后无需训练或主动建议即可显示；仍根据使用记录排序。完整的 `targets` 列表不受六格限制。
-- 暂停学习、关闭自动学习、关闭主动建议，不会清空上方快捷入口。敏感或已停用目标不会进入快捷格。
-- 在已添加列表中可直接点击「打开」，包括没有进入前六格的目标；手动打开不经由 AI 推荐/反馈链路。
-- 点「移除」仍只移除 Satori 启动列表记录，不删除电脑 exe，不重置学习权限或历史。
-- 沿用之前的 `<details bind:open>` 修复，刷新不会意外折叠已添加列表。
-- Windows 原生启动、Svelte 类型检查及 Playwright 端到端测试需在带 Rust、Node 依赖和 Windows 的构建环境执行。
+推送后查看对应**新提交**的两项 Actions 检查；历史失败不会因新提交通过而变绿。本次没有直接修改你的远程仓库。
 
+## 构建及验收
 
-## 0.1.3 首页快捷入口修复版 · 本次构建补齐
-
-本次以 Satori-v0.1.3-source-home-shortcuts-fix(1).zip 为基础，保留首页快捷入口、独立的手动启动与列表展开状态修复。版本、数据标识、SQLite schema 与依赖锁文件不变。
-
-构建前回归补齐：搜索输入明确展开完整列表；添加/打开/移除反馈按命令类型标注，避免文件名或提示文本误判；用户确认 AI 应用选择并成功启动后，确认经验写回 SQLite，防止重复接受旧确认。更新旧界面测试的精确按钮定位，并执行 Rust 标准格式化。
-
-73 项 Rust 核心测试、22 项 Playwright 界面测试、3 项浏览器隐私测试、14 项 AI 响应解析检查、23 项 AI 提示词检查与 7 项本机 HTTP 模拟均通过。Svelte 类型检查无错误或警告。最终 EXE 与 Windows Clippy 的结果见随包 BUILD-INFO.md，不以历史构建结果代替本次结果。
-
-本次便携运行包为 Windows x64 GNU Release，完整解压后运行 Start-Real.cmd 或 Start-Background.cmd；未制作安装向导。Windows 真机与真实服务商验收边界仍按前文说明。构建方法和工程说明见 RUST-BUILD.md。
+本次检查结果、EXE 校验值和验收范围见 `BUILD-INFO.md`。交付为未签名便携程序，不是安装向导。Windows 原生窗口、文件选择、输入法、实际音量、DDC/CI 和真实 API 服务仍需在 Windows 设备上验收。
