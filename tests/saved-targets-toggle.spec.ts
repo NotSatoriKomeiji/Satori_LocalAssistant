@@ -47,3 +47,42 @@ test('saved targets stay expanded after status changes and remain user-toggleabl
   await page.getByLabel('快速搜索').fill('Music');
   await expect(targets).toHaveJSProperty('open', true);
 });
+
+test('saved targets support keyboard activation and keep the choice across navigation', async ({page}) => {
+  await page.goto('/');
+  await page.getByText('演示场景', {exact: true}).click();
+  await page.getByRole('button', {name: '加载示例应用'}).click();
+  const targets = page.locator('details.saved-targets');
+  const heading = targets.locator('summary');
+  await heading.focus();
+  await heading.press('Enter');
+  await expect(targets).toHaveJSProperty('open', true);
+  await heading.press('Space');
+  await expect(targets).toHaveJSProperty('open', false);
+  await heading.press('Space');
+  await expect(targets).toHaveJSProperty('open', true);
+  await page.getByRole('button', {name: '设置', exact: true}).click();
+  await page.getByRole('button', {name: '首页', exact: true}).click();
+  await expect(targets).toHaveJSProperty('open', true);
+});
+
+test('search wins when a native collapse and input happen before the queued toggle event', async ({page}) => {
+  await page.goto('/');
+  await page.getByText('演示场景', {exact: true}).click();
+  await page.getByRole('button', {name: '加载示例应用'}).click();
+  const targets = page.locator('details.saved-targets');
+  await targets.locator('summary').click();
+  await expect(targets).toHaveJSProperty('open', true);
+
+  // Browser toggle events are queued. Keep collapse and search in one task to
+  // exercise the stale binding even on a fast local machine.
+  await page.evaluate(() => {
+    const details = document.querySelector<HTMLDetailsElement>('details.saved-targets')!;
+    details.querySelector('summary')!.click();
+    const input = document.querySelector<HTMLInputElement>('input[aria-label="快速搜索"]')!;
+    input.value = 'Music';
+    input.dispatchEvent(new Event('input', {bubbles: true}));
+  });
+  await expect(targets).toHaveJSProperty('open', true);
+  await expect(targets.getByRole('listitem')).toHaveCount(1);
+});

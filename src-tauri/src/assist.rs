@@ -4,13 +4,13 @@ use crate::{
     monitors::{self, Monitor},
 };
 use habitos_core::{
-    adjustment::{Choice, Preferences},
+    adjustment::Choice,
+    assistant_state::Saved,
     experience::{Kind, Scope},
     model::{now, Status},
-    quick_words::QuickWords,
     runtime::{Command, Runtime},
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::{json, Value};
 use std::{
     collections::HashMap,
@@ -24,12 +24,6 @@ use std::{
     time::{Duration, Instant},
 };
 use tauri::State;
-#[derive(Default, Serialize, Deserialize)]
-#[serde(default)]
-struct Saved {
-    quick_words: QuickWords,
-    brightness: Preferences,
-}
 struct Data {
     saved: Saved,
     monitors: Vec<Monitor>,
@@ -47,27 +41,7 @@ pub struct Assist {
 }
 impl Assist {
     pub fn new(path: PathBuf, demo: bool) -> Result<Self, String> {
-        let mut saved = Saved::default();
-        if path.exists() {
-            let bytes = std::fs::read(&path).map_err(|_| "无法读取助手设置")?;
-            let old: Value =
-                serde_json::from_slice(&bytes).map_err(|_| "助手设置损坏，请保留文件")?;
-            if old.get("quick_words").is_some() {
-                saved = serde_json::from_value(old).map_err(|_| "助手设置无效")?;
-            } else if let Some(words) = old.get("phrases").and_then(Value::as_array) {
-                saved.quick_words.words = words
-                    .iter()
-                    .filter_map(|w| w.get("text").and_then(Value::as_str))
-                    .map(|text| habitos_core::quick_words::Word {
-                        text: text.into(),
-                        uses: 2,
-                        last: now(),
-                        pinned: true,
-                    })
-                    .collect();
-            }
-        }
-        saved.quick_words.limit = saved.quick_words.limit.clamp(1, 200);
+        let saved = Saved::load(&path)?;
         Ok(Self {
             path,
             demo,
@@ -91,11 +65,12 @@ impl Assist {
             }),
         })
     }
-    fn save(&self, d: &Data) -> Result<(), String> {
-        let bytes = serde_json::to_vec_pretty(&d.saved).map_err(|_| "保存失败")?;
-        let tmp = self.path.with_extension("tmp");
-        std::fs::write(&tmp, bytes).map_err(|_| "无法写入助手设置")?;
-        std::fs::rename(tmp, &self.path).map_err(|_| "无法保存助手设置".into())
+    fn update_saved(
+        &self,
+        d: &mut Data,
+        edit: impl FnOnce(&mut Saved) -> Result<bool, String>,
+    ) -> Result<bool, String> {
+        d.saved.update(&self.path, edit)
     }
     pub fn start(self: &Arc<Self>, runtime: Runtime) {
         let ai_weak = Arc::downgrade(self);
@@ -197,10 +172,10 @@ impl Assist {
     }
     fn learn(&self, text: &str) {
         if let Ok(mut d) = self.data.lock() {
-            if d.saved.quick_words.learn(text, now()) {
-                if let Err(e) = self.save(&d) {
-                    d.input_message = e;
-                }
+            if let Err(e) =
+                self.update_saved(&mut d, |saved| Ok(saved.quick_words.learn(text, now())))
+            {
+                d.input_message = e;
             }
         }
     }
@@ -256,15 +231,17 @@ fn brightness_tick(
                             .map_err(|e| e.to_string())?;
                         }
                     }
-                    d.saved.brightness.record(Choice {
-                        app: c.app_id.clone(),
-                        device: m.id.clone(),
-                        period: c.hour / 6,
-                        value: m.value,
-                        at: now(),
-                        session: c.session.clone(),
-                    });
-                    s.save(&d)?;
+                    s.update_saved(&mut d, |saved| {
+                        saved.brightness.record(Choice {
+                            app: c.app_id.clone(),
+                            device: m.id.clone(),
+                            period: c.hour / 6,
+                            value: m.value,
+                            at: now(),
+                            session: c.session.clone(),
+                        });
+                        Ok(true)
+                    })?;
                     d.message = "已记住你的手动亮度，本场景不再自动改动".into();
                 }
             }
@@ -443,12 +420,10 @@ fn handle(s: &Assist, rt: &Runtime, r: Request) -> Result<Value, String> {
         Request::Status => snapshot(s),
         Request::QuickWords { enabled } => {
             let mut d = s.data.lock().map_err(|_| "状态不可用")?;
-            let old = d.saved.quick_words.enabled;
-            d.saved.quick_words.enabled = enabled;
-            if let Err(e) = s.save(&d) {
-                d.saved.quick_words.enabled = old;
-                return Err(e);
-            }
+            s.update_saved(&mut d, |saved| {
+                saved.quick_words.enabled = enabled;
+                Ok(true)
+            })?;
             d.input_message = if enabled {
                 "正在启动快速词；浏览器请安装配套扩展"
             } else {
@@ -463,8 +438,10 @@ fn handle(s: &Assist, rt: &Runtime, r: Request) -> Result<Value, String> {
                 return Err("最多保存1–200条快速词".into());
             }
             let mut d = s.data.lock().map_err(|_| "状态不可用")?;
-            d.saved.quick_words.limit = limit;
-            s.save(&d)?;
+            s.update_saved(&mut d, |saved| {
+                saved.quick_words.limit = limit;
+                Ok(true)
+            })?;
             drop(d);
             snapshot(s)
         }
@@ -474,36 +451,38 @@ fn handle(s: &Assist, rt: &Runtime, r: Request) -> Result<Value, String> {
                 return Err("请添加2–120字的普通词句，避开号码、账号和密码".into());
             }
             let mut d = s.data.lock().map_err(|_| "状态不可用")?;
-            if !d.saved.quick_words.words.iter().any(|w| w.text == text) {
-                if d.saved
-                    .quick_words
-                    .words
-                    .iter()
-                    .filter(|w| w.pinned)
-                    .count()
-                    >= d.saved.quick_words.limit
-                {
-                    return Err("已达到保存上限".into());
+            s.update_saved(&mut d, |saved| {
+                if saved.quick_words.words.iter().any(|w| w.text == text) {
+                    return Ok(false);
                 }
-                d.saved.quick_words.dismissed.retain(|w| w != text.trim());
-                d.saved
-                    .quick_words
-                    .words
-                    .push(habitos_core::quick_words::Word {
-                        text: text.into(),
-                        uses: 2,
-                        last: now(),
-                        pinned: true,
-                    });
-                s.save(&d)?;
-            }
+                {
+                    if saved.quick_words.words.iter().filter(|w| w.pinned).count()
+                        >= saved.quick_words.limit
+                    {
+                        return Err("已达到保存上限".into());
+                    }
+                    saved.quick_words.dismissed.retain(|w| w != text.trim());
+                    saved
+                        .quick_words
+                        .words
+                        .push(habitos_core::quick_words::Word {
+                            text: text.into(),
+                            uses: 2,
+                            last: now(),
+                            pinned: true,
+                        });
+                }
+                Ok(true)
+            })?;
             drop(d);
             snapshot(s)
         }
         Request::DeleteWord { text } => {
             let mut d = s.data.lock().map_err(|_| "状态不可用")?;
-            d.saved.quick_words.dismiss(&text);
-            s.save(&d)?;
+            s.update_saved(&mut d, |saved| {
+                saved.quick_words.dismiss(&text);
+                Ok(true)
+            })?;
             drop(d);
             snapshot(s)
         }
@@ -566,15 +545,18 @@ fn handle(s: &Assist, rt: &Runtime, r: Request) -> Result<Value, String> {
             }
             if ordinary(&st) {
                 if let Some(c) = st.current {
-                    d.saved.brightness.record(Choice {
-                        app: c.app_id,
-                        device,
-                        period: c.hour / 6,
-                        value,
-                        at: now(),
-                        session: c.session,
-                    });
-                    s.save(&d)?;
+                    s.update_saved(&mut d, |saved| {
+                        saved.brightness.record(Choice {
+                            app: c.app_id,
+                            device,
+                            period: c.hour / 6,
+                            value,
+                            at: now(),
+                            session: c.session,
+                        });
+                        Ok(true)
+                    })
+                    .map_err(|e| format!("亮度已调整，但学习数据未保存：{e}"))?;
                 }
             }
             d.message = "已调整，并记住这次选择".into();
@@ -596,16 +578,7 @@ fn handle(s: &Assist, rt: &Runtime, r: Request) -> Result<Value, String> {
             if status(rt)?.settings.paused {
                 return Err("助手已暂停".into());
             }
-            crate::cold_ai::validate(&endpoint, &model, &key)?;
-            if prompt.trim().is_empty() || prompt.len() > 8192 {
-                return Err("问题内容为空或过长".into());
-            }
-            rt.command(Command::ReserveManualAi)
-                .map_err(|e| e.to_string())?;
-            let text = powershell(
-                include_str!("../scripts/ai.ps1"),
-                &json!({"endpoint":endpoint,"model":model,"key":key,"prompt":prompt}),
-            )?;
+            let text = s.ai.ask_at(rt, &prompt, endpoint, model, key)?;
             Ok(json!({"answer":text}))
         }
     }
@@ -681,9 +654,6 @@ fn desktop_input(s: &Arc<Assist>, rt: &Runtime) -> Result<(), String> {
     let _ = child.wait();
     Ok(())
 }
-fn powershell(script: &str, input: &Value) -> Result<String, String> {
-    powershell_cancel(script, input, || false)
-}
 pub(crate) fn powershell_cancel(
     script: &str,
     input: &Value,
@@ -749,8 +719,115 @@ pub(crate) fn powershell_cancel(
     };
     let (result, bytes) = reader.join().map_err(|_| "适配器读取失败")?;
     result.map_err(|_| "适配器读取失败")?;
+    if cancel() {
+        return Err("AI 请求已取消，本地助手继续运行".into());
+    }
     if !exit.success() || bytes.len() > 65536 {
         return Err("适配器失败或响应超限；请检查设备能力/API配置".into());
     }
     String::from_utf8(bytes).map_err(|_| "适配器响应编码错误".into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn failing_saved_operations_never_change_live_settings_or_the_original_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("assist.json");
+        let rt = Runtime::start(dir.path().join("demo.db"), true).unwrap();
+        let mut assist = Assist::new(path.clone(), true).unwrap();
+        handle(&assist, &rt, Request::QuickWords { enabled: true }).unwrap();
+        let original = std::fs::read(&path).unwrap();
+        let saved = serde_json::to_value(&assist.data.lock().unwrap().saved).unwrap();
+        assist.path = path.join("blocked.json");
+        for request in [
+            Request::QuickWords { enabled: false },
+            Request::Limit { limit: 1 },
+            Request::AddWord {
+                text: "祝你今天顺利。".into(),
+            },
+            Request::DeleteWord {
+                text: "谢谢你的帮助！".into(),
+            },
+        ] {
+            assert!(handle(&assist, &rt, request).is_err());
+            assert_eq!(
+                serde_json::to_value(&assist.data.lock().unwrap().saved).unwrap(),
+                saved
+            );
+            assert_eq!(std::fs::read(&path).unwrap(), original);
+        }
+        assist.learn("明天再联系。");
+        assert_eq!(
+            serde_json::to_value(&assist.data.lock().unwrap().saved).unwrap(),
+            saved
+        );
+        rt.shutdown();
+    }
+
+    #[test]
+    fn successful_commands_persist_across_restart_and_duplicates_are_not_added() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("assist.json");
+        let rt = Runtime::start(dir.path().join("demo.db"), true).unwrap();
+        let assist = Assist::new(path.clone(), true).unwrap();
+        handle(&assist, &rt, Request::QuickWords { enabled: true }).unwrap();
+        handle(&assist, &rt, Request::Limit { limit: 30 }).unwrap();
+        for _ in 0..2 {
+            handle(
+                &assist,
+                &rt,
+                Request::AddWord {
+                    text: "明天再联系。".into(),
+                },
+            )
+            .unwrap();
+        }
+        handle(
+            &assist,
+            &rt,
+            Request::DeleteWord {
+                text: "谢谢你的帮助！".into(),
+            },
+        )
+        .unwrap();
+        let restarted = Assist::new(path, true).unwrap();
+        let state = snapshot(&restarted).unwrap();
+        assert_eq!(state["enabled"], true);
+        assert_eq!(state["limit"], 30);
+        let words = state["words"].as_array().unwrap();
+        assert_eq!(
+            words.iter().filter(|w| w["text"] == "明天再联系。").count(),
+            1
+        );
+        assert!(!words.iter().any(|w| w["text"] == "谢谢你的帮助！"));
+        rt.shutdown();
+    }
+
+    #[test]
+    fn brightness_changes_are_reported_even_when_learning_cannot_be_saved() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("assist.json");
+        let rt = Runtime::start(dir.path().join("demo.db"), true).unwrap();
+        rt.command(Command::DemoScene("game".into())).unwrap();
+        let mut assist = Assist::new(path.clone(), true).unwrap();
+        handle(&assist, &rt, Request::QuickWords { enabled: true }).unwrap();
+        assist.path = path.join("blocked.json");
+        let result = handle(
+            &assist,
+            &rt,
+            Request::BrightnessSet {
+                device: "demo:display".into(),
+                before: 50,
+                value: 60,
+            },
+        );
+        assert!(result.unwrap_err().contains("亮度已调整"));
+        let data = assist.data.lock().unwrap();
+        assert_eq!(data.monitors[0].value, 60);
+        assert!(data.saved.brightness.choices.is_empty());
+        rt.shutdown();
+    }
 }

@@ -1,7 +1,5 @@
-> v0.1.4 更新：构建命令仍适用。本版以最新 BUILD-INFO.md 为验收记录；下文“本次”及 AI 模拟检查结果记述的是 v0.1.3 的历史构建，不表示本次重新执行了全部历史检查。v0.1.4 的源码和运行包文件名已更新。
-
-# Satori 0.1.3：从源码到 Windows EXE
-本说明针对本次“首页快捷入口修复版”，API 仍是可选增强层。
+# Satori 0.1.5：从源码到 Windows EXE
+本说明对应 v0.1.5 完整修订。API 仍是可选增强层；本次实际执行记录和平台边界见 BUILD-INFO.md。
 
 ## 1. Rust 在这里负责什么
 Rust 把 .rs 源文件编译成原生机器码。Cargo 是 Rust 的依赖、编译和测试工具，rustup 管理编译器与目标平台。普通用户运行编译好的 Satori，不需要安装 Rust 或 Node；Windows 界面需要 WebView2 Runtime。
@@ -65,10 +63,16 @@ npm test
 powershell -NoProfile -File tests/ai-response.Tests.ps1
 powershell -NoProfile -File tests/ai-prompt.Tests.ps1
 python tests/ai_http_fixture.py --powershell powershell
+npm run build
+cargo test -p habitos-desktop --locked --features custom-protocol
+cargo clippy --workspace --all-targets --locked --features custom-protocol -- -D warnings
 npm run tauri -- build --no-bundle -- --locked
 node scripts/verify-release.mjs target/release/satori.exe
+node scripts/package-release.mjs
+powershell -NoProfile -File tests/windows-smoke.Tests.ps1 -Executable release/satori/satori.exe
+Compress-Archive -Path release/satori -DestinationPath release/Satori-v0.1.5-windows-x64.zip
 ```
-HTTP 模拟测试需要 Python 3，只访问本机测试服务；不消耗 API 额度。Playwright 首次要下载测试浏览器；以后已有浏览器可跳过安装。
+打包器要求新的 release/satori 目录，重复打包请选择新的输出目录；不会自动删除已有产物。原生 smoke 检查需要可交互的 Windows 环境及 WebView2 Runtime，只运行演示模式。HTTP 模拟测试需要 Python 3，只访问本机测试服务；不消耗 API 额度。Playwright 首次要下载测试浏览器；以后已有浏览器可跳过安装。
 
 默认 Windows x64 MSVC 环境下，运行文件位于 target/release/satori.exe。前端由 tauri build 的 beforeBuildCommand 自动生成，生产构建启用 custom-protocol 来嵌入前端。项目 build.rs 会拒绝未嵌入前端的 Release，防止交付一个仍依赖开发服务器的程序。
 
@@ -88,7 +92,7 @@ lto = true
 codegen-units = 1
 strip = true
 ```
-它以缩小体积为优化目标，启用跨代码包的链接优化、减少代码生成分块并去除符号，因此编译通常更慢。Release 是编译方式，不代表软件已经成熟；Satori 仍标注 0.1.3 Alpha。
+它以缩小体积为优化目标，启用跨代码包的链接优化、减少代码生成分块并去除符号，因此编译通常更慢。Release 是编译方式，不代表软件已经成熟；Satori 仍标注 0.1.5 Alpha。
 
 --no-bundle 生成发布 EXE，但不创建安装向导。本次交付的是完整便携 ZIP，含 EXE、WebView2Loader.dll、启动脚本、浏览器配套文件和第三方许可。请完整解压，不能只把 EXE 从 ZIP 中拖出来就运行。
 
@@ -106,7 +110,7 @@ npm run tauri -- build -- --locked
 CARGO_BUILD_JOBS=2 CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_CODEGEN_UNITS=1 \
   npm run tauri -- build --target x86_64-pc-windows-gnu --no-bundle -- --locked
 ```
-需要预先安装该 Rust target、MinGW 编译和资源工具，并把它们加入 PATH。本次构建遇到宿主侧中间对象文件为空，重试时将并行任务限制为 2，并把宿主构建依赖的 codegen-units 设为 1；最终应用的发布优化配置与依赖锁文件保持不变。交叉编译不意味着你在 Windows 开发时也要装 MinGW。
+需要预先安装该 Rust target、MinGW 编译和资源工具，并把它们加入 PATH。本次使用两个构建任务，宿主构建依赖的 codegen-units 为 1；最终应用的发布优化配置保持不变，第三方锁定版本未升级。交叉编译不意味着你在 Windows 开发时也要装 MinGW。
 
 运行包 BUILD-INFO.md 记录本次最终检查和 SHA-256。exe 检查会核对当前前端、图标与内嵌辅助脚本，避免误发旧文件。没有在本次环境中启动 Windows EXE，也没有实际连接外接屏或真实 API 服务商。
 

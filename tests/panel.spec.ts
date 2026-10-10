@@ -1,4 +1,5 @@
 import {test,expect} from '@playwright/test';
+import {readyForScreenshot} from './helpers/screenshots';
 test('novice navigation removes tasks, permission setup and scoring controls',async({page})=>{
  await page.goto('/');await expect(page.getByRole('navigation').getByRole('button')).toHaveCount(4);
  await page.getByRole('button',{name:'自动调节',exact:true}).click();await expect(page.getByRole('button',{name:'自动调节总开关'})).toHaveAttribute('aria-pressed','true');
@@ -18,7 +19,7 @@ test('settings are simple, sensitive apps remain excluded, quick search filters'
  await page.goto('/');await page.getByText('演示场景',{exact:true}).click();await page.getByRole('button',{name:'加载示例应用'}).click();await page.getByLabel('快速搜索').fill('Music');await expect(page.getByRole('button',{name:'打开 Music.exe（模拟）',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'打开 Editor.exe（模拟）',exact:true})).toHaveCount(0);
  await page.getByLabel('模拟前台软件').selectOption('sensitive');await page.getByRole('button',{name:'设置',exact:true}).click();await page.getByText('不希望学习的软件',{exact:true}).click();await expect(page.getByRole('checkbox',{name:'学习 KeePass.exe'})).toBeDisabled();await expect(page.getByRole('checkbox',{name:'学习 KeePass.exe'})).not.toBeChecked();
 });
-test('desktop and narrow layouts and screenshots',async({page})=>{await page.goto('/');await page.screenshot({path:'docs/home.png',fullPage:true});await page.getByRole('button',{name:'快速词',exact:true}).click();await page.getByRole('button',{name:'快速词总开关'}).click();await page.getByLabel('快速词试写').fill('你好');await page.screenshot({path:'docs/words.png',fullPage:true});for(const width of [1160,840,620]){await page.setViewportSize({width,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);}});
+test('desktop and narrow layouts and screenshots',async({page})=>{await page.goto('/');await expect(page.getByRole('heading',{name:'常用应用与网站',exact:true})).toBeVisible();await expect(page.getByText('本地模式 · AI 未连接',{exact:true})).toBeVisible();await readyForScreenshot(page);await page.screenshot({path:'docs/home.png',fullPage:true});await page.getByRole('button',{name:'快速词',exact:true}).click();await page.getByRole('button',{name:'快速词总开关'}).click();await page.getByLabel('快速词试写').fill('你好');await readyForScreenshot(page);await page.screenshot({path:'docs/words.png',fullPage:true});for(const width of [1160,840,620]){await page.setViewportSize({width,height:900});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);}});
 test('tray still has six slots and a working local clock',async({page})=>{await page.setViewportSize({width:480,height:350});await page.goto('/?view=tray');await expect(page.getByRole('group',{name:'常用应用快捷入口'}).getByRole('button')).toHaveCount(6);await expect(page.locator('.greeting')).not.toBeEmpty();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);});
 
  test('local experience works without connecting optional AI and can be forgotten',async({page})=>{
@@ -40,5 +41,5 @@ test('dedicated startup switch toggles independently of learning and pause',asyn
  await page.getByRole('button',{name:'暂停助手'}).click();await expect(toggle).toBeEnabled();
  await toggle.click();await expect(toggle).toHaveAttribute('aria-pressed','false');
  await expect(page.getByText('演示开关，不会修改真实启动项')).toBeVisible();
- await page.screenshot({path:'docs/startup.png',fullPage:true});
+ await readyForScreenshot(page);await page.screenshot({path:'docs/startup.png',fullPage:true});
 });

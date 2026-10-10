@@ -4,15 +4,17 @@
 
 Satori 是面向普通电脑用户的 Windows 桌面助手。无需 API 就能学习常用应用、提供快速词，以及按习惯小幅调节主音量和外接屏亮度。可选 AI 层负责解释反复出现的陌生冲突、协助澄清程序选择；经过验证的经验保存在 SQLite，后续相似场景优先离线处理。
 
-**v0.1.4 Alpha · 搜索展开与版本同步修复 · MIT**
+**v0.1.5 Alpha · 状态、保存与发布验收修订 · MIT**
 
 *A local-first Windows companion that learns your habits and wakes optional AI only when needed.*
 
 公开版整理自内部 0.3.0 原型，保留现有功能和 SQLite schema 5，不是回退旧代码。采用 Rust / Tauri / Svelte / SQLite。
 
+本版修复列表展开与异步状态竞争、辅助设置保存一致性及失效 AI 返回，并补全完整便携包的 CI 校验。详见 [发布说明](docs/RELEASE.md)、[实际构建验收](docs/BUILD-INFO.md) 和 [CI 风险及参考实践](docs/CI-REVIEW.md)。
+
 ## 运行
 
-完整解压 Windows 运行包，进入 `satori`，双击 `Start-Background.cmd`。托盘左键查看常用应用，双击打开主面板，右键暂停或退出。`Start-Real.cmd` 打开真实面板；`Start-Demo.cmd` 使用独立模拟数据库，不控制真实设备、不发送 AI 请求。
+完整解压 Windows 运行包，进入 `satori`，可直接双击 `satori.exe` 打开面板，或双击 `Start-Background.cmd` 后台运行。托盘左键查看常用应用，双击打开主面板，右键暂停或退出。`Start-Real.cmd` 打开真实面板；`Start-Demo.cmd` 使用独立模拟数据库，不控制真实设备、不发送 AI 请求。
 
 需要 Windows x64 与 WebView2 Runtime；`satori.exe` 和 `WebView2Loader.dll` 放在同一目录。切换真实/演示模式前，从托盘退出旧实例。
 
@@ -98,4 +100,3 @@ node scripts/verify-release.mjs target/release/satori.exe
 本项目使用 [MIT 许可证](LICENSE)。第三方依赖和运行包组件遵守各自许可证，清单与许可文本见 [third-party/DEPENDENCIES.md](third-party/DEPENDENCIES.md)。源码包不包含构建缓存、运行程序或个人数据库。
 
 本项目使用 AI 辅助设计、编码、文档和测试；产品决策与发布由维护者负责。具体边界见 [AI 辅助开发说明](docs/AI-DEVELOPMENT.md)。
-## 0.14 修理了一个边界bug，并且略微优化代码逻辑（孩子们我不该大晚上不睡觉和gpt一起敲代码的）

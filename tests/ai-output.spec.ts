@@ -1,4 +1,5 @@
 import {test,expect} from '@playwright/test';
+import {readyForScreenshot} from './helpers/screenshots';
 
 test('AI replies preserve Chinese and line breaks, wrap long text, and clear stale output after failure',async({page})=>{
  await page.route('**/src/assist-api.ts',route=>route.fulfill({contentType:'application/javascript',body:`
@@ -27,7 +28,7 @@ test('AI replies preserve Chinese and line breaks, wrap long text, and clear sta
  await expect(output).toHaveCSS('overflow-wrap','anywhere');
  expect(await page.evaluate(()=>(window as any).unexpectedAiExecution)).toBeUndefined();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
- await output.screenshot({path:'docs/ai-output.png'});
+ await readyForScreenshot(page);await output.screenshot({path:'docs/ai-output.png'});
  await page.getByLabel('问问AI').fill('再问一次');
  await page.getByRole('button',{name:'发送问题',exact:true}).click();
  await expect(output).toHaveCount(0);

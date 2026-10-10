@@ -19,6 +19,9 @@ tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-single-instance = "2"
 habitos-core = { path = "../crates/habitos-core" }
 
+[dev-dependencies]
+tempfile = "3"
+
 [[bin]]
 name = "satori"
 path = "src/main.rs"

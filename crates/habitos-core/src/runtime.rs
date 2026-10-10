@@ -431,10 +431,12 @@ mod tests {
             demo: DemoPlatform,
             reads: Arc<AtomicUsize>,
             wake: Arc<Mutex<Option<Waker>>>,
+            read_event: Sender<()>,
         }
         impl Platform for Spy {
             fn snapshot(&mut self) -> Result<crate::platform::Snapshot> {
                 self.reads.fetch_add(1, Ordering::SeqCst);
+                let _ = self.read_event.send(());
                 self.demo.snapshot()
             }
             fn set_volume(&mut self, s: &crate::platform::Snapshot, v: f64) -> Result<()> {
@@ -449,6 +451,7 @@ mod tests {
         let wake = Arc::new(Mutex::new(None::<Waker>));
         let spy_reads = reads.clone();
         let spy_wake = wake.clone();
+        let (read_event, read_events) = mpsc::channel();
         let runtime = Runtime::start_worker(move || {
             Ok((
                 Engine::new(Store::memory()?, true)?,
@@ -456,6 +459,7 @@ mod tests {
                     demo: DemoPlatform::default(),
                     reads: spy_reads,
                     wake: spy_wake,
+                    read_event,
                 }),
             ))
         })
@@ -471,8 +475,11 @@ mod tests {
             baseline,
             "no 250ms/2s device polling"
         );
+        while read_events.try_recv().is_ok() {}
         wake.lock().unwrap().as_ref().unwrap()(Signal::Foreground);
-        std::thread::sleep(Duration::from_millis(220));
+        read_events
+            .recv_timeout(Duration::from_secs(5))
+            .expect("foreground event must trigger a device read");
         runtime.command(Command::Status).unwrap();
         assert!(reads.load(Ordering::SeqCst) > baseline);
         runtime.shutdown();

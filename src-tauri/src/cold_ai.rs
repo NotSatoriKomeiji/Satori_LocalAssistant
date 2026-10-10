@@ -65,29 +65,62 @@ pub fn validate(endpoint: &str, model: &str, key: &str) -> Result<(), String> {
 }
 impl ColdAi {
     pub fn ask(&self, rt: &Runtime, prompt: &str) -> Result<String, String> {
+        self.ask_config(rt, prompt, None)
+    }
+    pub fn ask_at(
+        &self,
+        rt: &Runtime,
+        prompt: &str,
+        endpoint: String,
+        model: String,
+        key: String,
+    ) -> Result<String, String> {
+        validate(&endpoint, &model, &key)?;
+        self.ask_config(
+            rt,
+            prompt,
+            Some(Config {
+                endpoint,
+                model,
+                key,
+            }),
+        )
+    }
+    fn ask_config(
+        &self,
+        rt: &Runtime,
+        prompt: &str,
+        explicit: Option<Config>,
+    ) -> Result<String, String> {
         if prompt.trim().is_empty() || prompt.len() > 8192 {
             return Err("问题为空或过长".into());
         }
-        let config = self
-            .config
-            .lock()
-            .map_err(|_| "AI 配置不可用")?
-            .clone()
-            .ok_or("请先开启可选 AI 增强")?;
+        let config_guard = self.config.lock().map_err(|_| "AI 配置不可用")?;
+        let config = config_guard.clone().ok_or("请先开启可选 AI 增强")?;
+        // Capture credentials and their generation under the same configuration lock.
         let epoch = self.epoch.load(Ordering::Acquire);
+        drop(config_guard);
+        let config = explicit.unwrap_or(config);
         rt.command(Command::ReserveManualAi)
             .map_err(|e| e.to_string())?;
-        crate::assist::powershell_cancel(
+        let cancelled = || {
+            self.epoch.load(Ordering::Acquire) != epoch
+                || rt
+                    .command(Command::Status)
+                    .map(|s| s.settings.paused)
+                    .unwrap_or(true)
+        };
+        let result = crate::assist::powershell_cancel(
             include_str!("../scripts/ai.ps1"),
             &json!({"endpoint":config.endpoint,"model":config.model,"key":config.key,"prompt":prompt}),
-            || {
-                self.epoch.load(Ordering::Acquire) != epoch
-                    || rt
-                        .command(Command::Status)
-                        .map(|s| s.settings.paused)
-                        .unwrap_or(true)
-            },
-        )
+            cancelled,
+        );
+        // A fast completion can race the transport's periodic cancellation check.
+        if cancelled() {
+            Err("AI 请求已取消，本地助手继续运行".into())
+        } else {
+            result
+        }
     }
     pub fn configure(
         &self,

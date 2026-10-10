@@ -1,40 +1,33 @@
-# Satori v0.1.4 Alpha · 搜索展开修复版
+# Satori v0.1.5 Alpha · 完整修订
 
-本版以用户上传的 `Satori-v0.1.3-home-shortcuts-source(1).zip` 为基础。上传源码已经包含搜索输入展开列表的修复；本次先在未修改源码上运行全部 22 项 Playwright 测试，全部通过。因此，截图中的 GitHub 失败记录不能用于判断上传源码仍有此错误，也不能单凭截图确认当前仓库是否已更新。
+本版处理已复现的竞争与保存一致性问题，并补全 GitHub Actions 和便携发布流程。架构、学习策略与已有数据格式保持兼容。
 
-## 本版修改
+## 修改
 
-- 保留非空搜索输入时展开完整列表、后台刷新不覆盖手动展开/收起的行为。
-- 快捷格和完整列表使用相同的搜索词处理：忽略首尾空格及大小写。
-- 扩展原失败测试：清空搜索保持展开、空白搜索不强制展开、搜索期间允许手动收起、暂停/恢复保留收起状态、再次输入搜索重新展开。
-- Cargo 工作区、两份本地 crate 锁记录、npm 元数据、Tauri 配置和界面统一标为 0.1.4；第三方依赖版本不变。浏览器扩展未修改，沿用 0.1.3。
+- 已添加目标列表由明确的点击状态控制，避免排队的原生 toggle 事件覆盖搜索展开；支持 Enter、Space 和跨页面状态保留。
+- 快速词、亮度、AI 面板只接收当前操作对应的结果。慢刷新不重叠，旧刷新和旧错误不会覆盖新操作，卸载后忽略迟到结果。
+- 主面板初始/可见性刷新不能覆盖更新的推送状态；异步注册的事件监听在卸载后及时释放。
+- 辅助 JSON 设置先修改候选副本，再写入同目录临时文件、同步并替换原文件，成功后才提交内存。写入或替换失败保留旧设置；坏文件保留供恢复。此处不是修改 SQLite 持久化策略。
+- 外接屏已成功调节、学习数据却保存失败时，明确报告两者的真实结果。
+- AI 请求在配置、暂停或相关上下文失效时丢弃旧结果，包含传输刚好结束的竞争窗口；旧的显式接口复用相同校验与取消逻辑。
+- 扩展测试使用虚拟时钟，核心正向等待依据事件完成；保留用于证明停止/空闲行为的必要时间窗口。
+- Linux CI 安装中文和表情字体，截图等待字体及页面状态；检查中文字形，失败保留截图和 trace。README 预览已重新生成。
+- CI 固定 Rust 1.90.0、Windows 2022、Ubuntu 24.04，面板使用两个 worker；增加 220 次时序回归、全工作区 Clippy、原生桌面测试与完整发布包启动检查。
+- 统一打包脚本验证当前内嵌前端、图标、辅助脚本、版本和 x64 WebView2Loader，附带文档、许可、扩展、启动脚本和校验清单。Windows CI 上传完整便携 ZIP。
 
-## 下载与升级
+参考实践及风险覆盖见 [CI 与工程决策](CI-REVIEW.md)，实际执行结果及限制见 [构建记录](BUILD-INFO.md)。实现按本项目边界重新编写，没有复制参考项目的代码。
 
-- `Satori-v0.1.4-source.zip`：完整源码、测试、锁文件、GitHub Actions、文档和许可，不包含构建缓存。
-- `Satori-v0.1.4-windows-x64.zip`：Windows x64 便携 Release；完整解压后进入 satori 目录，运行 `Start-Real.cmd` 或 `Start-Background.cmd`。程序需要 WebView2 Runtime。
+## 下载与启动
 
-升级前从托盘退出旧实例。界面左下角显示 v0.1.4。应用标识仍为 `io.habitos.desktop`，SQLite schema 仍为 5，升级无需删除学习数据。
+- `Satori-v0.1.5-complete-source.zip`：完整源代码、测试、锁文件、Actions、文档、预览和许可，排除构建缓存与私人数据。
+- `Satori-v0.1.5-complete-windows-x64.zip`：Windows x64 便携 Release。
 
-## 更新 GitHub 源码
+完整解压运行包，进入 satori 目录，可直接双击 satori.exe。Start-Real.cmd 打开面板，Start-Background.cmd 后台运行，Start-Demo.cmd 进入模拟模式。系统需要 WebView2 Runtime，保持 WebView2Loader.dll 同目录。先从托盘退出旧实例，避免单实例机制把启动请求交给旧版本。
 
-把源码包中的 `Cyber3rdEye_Satori` 目录内容复制到现有仓库根目录（保留现有 `.git`）。同时替换 `src/App.svelte`、测试、版本文件、文档及 `.github` 内容；不要把项目目录整体套进仓库再建一层，也不要把 Release ZIP 当作源码上传。
+本次是带 complete 名称的完整修订，请替换此前同版本包；当前 EXE SHA-256 见 BUILD-INFO.md。应用仍是 Alpha，Release 表示生产编译方式，不表示所有硬件与服务商已经验证。
 
-在仓库目录检查后提交：
+## 更新已有 GitHub 仓库
 
-```powershell
-npm ci
-npm run check
-npx playwright install chromium
-npm test
-git status
-git add src/App.svelte tests/saved-targets-toggle.spec.ts Cargo.toml Cargo.lock package.json package-lock.json src-tauri/tauri.conf.json README.md docs/RELEASE.md docs/BUILD-INFO.md docs/RUST-BUILD.md
-git commit -m "fix(panel): preserve saved target toggles and normalize quick search"
-git push
-```
+把源码包中 Cyber3rdEye_Satori 的内容放到现有仓库根目录，保留现有 .git，不要额外嵌套项目目录。确认新增测试、脚本与 .github/workflows/ci.yml 都已纳入提交，不能只复制 App.svelte。先检查 git diff 和 git status，确认没有私人数据，再提交并推送。
 
-推送后查看对应**新提交**的两项 Actions 检查；历史失败不会因新提交通过而变绿。本次没有直接修改你的远程仓库。
-
-## 构建及验收
-
-本次检查结果、EXE 校验值和验收范围见 `BUILD-INFO.md`。交付为未签名便携程序，不是安装向导。Windows 原生窗口、文件选择、输入法、实际音量、DDC/CI 和真实 API 服务仍需在 Windows 设备上验收。
+查看本次新提交对应的 Windows 与 panel 作业；历史失败记录不会自动变绿。Windows 作业将实际执行 5.1 回归、桌面测试、生产构建和已打包 EXE 的演示启动。本次交付没有直接推送仓库或运行远程 Actions。

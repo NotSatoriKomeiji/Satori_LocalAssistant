@@ -4,14 +4,14 @@ permissions:
   contents: read
 jobs:
   windows:
-    runs-on: windows-latest
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
           cache: npm
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.90.0
         with:
           components: rustfmt, clippy
       - run: npm ci
@@ -29,14 +29,55 @@ jobs:
       - run: npm run check
       - run: npm run build
       - run: cargo test -p habitos-desktop --locked --features custom-protocol
-      - run: npm run tauri -- build --no-bundle
+      - run: cargo clippy --workspace --all-targets --locked --features custom-protocol -- -D warnings
+      - run: npm run tauri -- build --no-bundle -- --locked
       - run: node scripts/verify-release.mjs target/release/satori.exe
+      - name: Package complete portable release
+        run: |
+          node scripts/package-release.mjs
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          Compress-Archive -Path release/satori -DestinationPath "release/Satori-v$version-windows-x64.zip"
+      - name: Ensure WebView2 Runtime for native startup
+        shell: powershell
+        timeout-minutes: 5
+        run: |
+          $ErrorActionPreference = 'Stop'
+          function Get-WebViewVersion {
+            $keys = @(
+              'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}',
+              'HKCU:\Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
+            )
+            foreach ($key in $keys) {
+              $pv = (Get-ItemProperty -LiteralPath $key -ErrorAction SilentlyContinue).pv
+              if ($pv) {
+                try { if ([version]$pv -gt [version]'0.0.0.0') { return $pv } } catch {}
+              }
+            }
+          }
+          if (!(Get-WebViewVersion)) {
+            $installer = Join-Path $env:RUNNER_TEMP 'MicrosoftEdgeWebview2Setup.exe'
+            Invoke-WebRequest -UseBasicParsing -Uri 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile $installer
+            $signature = Get-AuthenticodeSignature -LiteralPath $installer
+            if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch '(^|,\s*)O=Microsoft Corporation(,|$)') {
+              throw 'WebView2 bootstrapper must have a valid Microsoft signature'
+            }
+            $setup = Start-Process -FilePath $installer -ArgumentList '/silent','/install' -PassThru
+            if (!$setup.WaitForExit(180000)) { Stop-Process -Id $setup.Id -Force; throw 'WebView2 installation timed out' }
+            if ($setup.ExitCode -ne 0) { throw "WebView2 installer failed: $($setup.ExitCode)" }
+          }
+          if (!(Get-WebViewVersion)) { throw 'WebView2 Runtime is unavailable after setup' }
+          Write-Output "WebView2 Runtime: $(Get-WebViewVersion)"
+      - name: Native packaged Windows demo startup
+        shell: powershell
+        run: ./tests/windows-smoke.Tests.ps1 -Executable release/satori/satori.exe
       - uses: actions/upload-artifact@v4
         with:
           name: satori-windows-unsigned-alpha
-          path: target/release/satori.exe
+          path: release/*.zip
   panel:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    env:
+      CI: 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -45,5 +86,28 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
+      - name: Install Chinese fonts for preview screenshots
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-noto-cjk fonts-noto-color-emoji
       - run: npm run test:browser
       - run: npm test
+      - name: Repeat timing-sensitive regressions
+        run: npm test -- --workers=2 --repeat-each=20 tests/saved-targets-toggle.spec.ts tests/assist-refresh.spec.ts tests/assist.spec.ts
+      - name: Upload failed browser test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: satori-panel-failure-diagnostics
+          path: test-results/
+          if-no-files-found: ignore
+      - name: Upload verified preview screenshots
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: satori-preview-screenshots
+          path: |
+            docs/home.png
+            docs/words.png
+            docs/startup.png
+            docs/ai-output.png

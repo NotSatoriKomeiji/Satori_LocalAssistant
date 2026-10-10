@@ -3,10 +3,11 @@
  export let data:Status;export let mode:'words'|'adjust'|'ai'='words';
  let state:AssistStatus|null=null,error='',message='',busy=false,text='',limit=50,trial='',showPanel=false,composing=false,editor:HTMLTextAreaElement;
  let endpoint=localStorage.getItem('satori:ai-endpoint')??'',model=localStorage.getItem('satori:ai-model')??'',key='',prompt='',answer='';
- async function run(r:Request){if(busy)return;busy=true;error='';try{const next=await assist<AssistStatus>(r);state=next;limit=next.limit;return true;}catch(e){error=String(e);return false;}finally{busy=false;}}
- onMount(()=>{let alive=true;const refresh=async()=>{try{const next=await assist({op:"status"});if(alive&&!busy){state=next;}}catch(e){if(alive)error=String(e);}};run({op:'status'});const timer=setInterval(refresh,2000);return()=>{alive=false;clearInterval(timer);};});
+ let alive=true,revision=0,refreshing=false;
+ async function run(r:Request){if(busy||!alive)return false;const current=++revision;busy=true;error='';try{const next=await assist<AssistStatus>(r);if(!alive||current!==revision)return false;state=next;limit=next.limit;return true;}catch(e){if(alive&&current===revision)error=String(e);return false;}finally{if(current===revision)busy=false;}}
+ onMount(()=>{alive=true;const refresh=async()=>{if(busy||refreshing)return;const current=revision;refreshing=true;try{const next=await assist({op:'status'});if(alive&&!busy&&current===revision)state=next;}catch(e){if(alive&&!busy&&current===revision)error=String(e);}finally{refreshing=false;}};run({op:'status'});const timer=setInterval(refresh,2000);return()=>{alive=false;revision++;clearInterval(timer);};});
  function insert(value:string){if(!state?.enabled||composing||data.settings.paused)return;const start=editor?.selectionStart??trial.length,end=editor?.selectionEnd??trial.length;trial=trial.slice(0,start)+value+trial.slice(end);showPanel=false;queueMicrotask(()=>{editor.focus();editor.setSelectionRange(start+value.length,start+value.length);});}
- async function ask(){if(busy)return;busy=true;error='';answer='';try{answer=(await assist<{answer:string}>({op:'ask',prompt})).answer;}catch(e){error=String(e);}finally{busy=false;}}
+ async function ask(){if(busy||!alive)return;const current=++revision;busy=true;error='';answer='';try{const next=await assist<{answer:string}>({op:'ask',prompt});if(alive&&current===revision)answer=next.answer;}catch(e){if(alive&&current===revision)error=String(e);}finally{if(current===revision)busy=false;}}
  async function connect(){localStorage.setItem('satori:ai-endpoint',endpoint);localStorage.setItem('satori:ai-model',model);if(await run({op:'ai_mode',enabled:true,endpoint,model,key}))key='';}
 </script>
 {#if error}<p class="error" role="alert">{error}</p>{/if}{#if message}<p role="status">{message}</p>{/if}

@@ -7,7 +7,8 @@ assignees: ''
 ---
 
 版本：
-Windows / 浏览器版本：
+EXE SHA-256（运行包 BUILD-INFO.md 中可查）：
+Windows / WebView2 / 浏览器版本：
 模式：真实 / 桌面模拟 / 网页预览
 
 复现步骤：

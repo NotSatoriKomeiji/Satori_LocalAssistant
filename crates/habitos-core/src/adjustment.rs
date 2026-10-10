@@ -9,7 +9,7 @@ pub struct Choice {
     pub at: i64,
     pub session: String,
 }
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 pub struct Preferences {
     pub choices: Vec<Choice>,
 }
